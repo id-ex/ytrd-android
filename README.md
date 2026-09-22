@@ -1,83 +1,58 @@
-# Ytrd Droid
+# yTRD Android
 
-> Историческое описание MVP ниже устарело: текущий runtime использует Java,
-> youtubedl-android и FFmpeg, а не Chaquopy. Актуализация — в этапе 0 плана.
+Android-приложение для загрузки YouTube-видео с русской закадровой озвучкой
+Yandex VOT. Самостоятельный Java runtime: Python, Chaquopy и Termux не используются.
 
-## Версия и локальная конфигурация
+## Сборка
 
-Версия Android-приложения хранится в `version.properties`.
-Правила выпусков: [VERSIONING.md](VERSIONING.md).
+- JDK 17;
+- Android SDK Platform 35, Build Tools 34.0.0;
+- Gradle Wrapper 8.9 (в репозитории), Android Gradle Plugin 8.7.3;
+- minSdk 26, targetSdk 35; ABI: arm64-v8a, armeabi-v7a, x86_64.
 
-Для сборки нужны JDK 17 и Android SDK; Gradle Wrapper включён в репозиторий.
-Ключ VOT передаётся через переменную окружения `VOT_HMAC_KEY` либо строку
-`VOT_HMAC_KEY=ваш_ключ` в локальном `local.properties` (исключён из Git).
-Переменная окружения имеет приоритет. Без ключа APK собирается, но перевод
-недоступен. Ключ включается в APK и может быть извлечён из него; эта настройка
-лишь исключает его хранение в Git. Не публикуйте сгенерированные BuildConfig.
-
-```bash
-JAVA_HOME=/путь/к/jdk17 ./gradlew assembleDebug
-```
-
-Минимальный Android GUI для `ytrd` без Termux.
-
-## Как работает
-
-Приложение встраивает Python через [Chaquopy](https://chaquo.com/chaquopy/) и кладёт пакет `ytrd` внутрь APK:
-
-```text
-app/src/main/python/ytrd/
-app/src/main/python/ytrd_android_bridge.py
-```
-
-Поток:
-
-1. пользователь вставляет ссылку YouTube;
-2. выбирает режим, качество, субтитры и Live Voice;
-3. приложение формирует CLI-аргументы `ytrd`;
-4. Java вызывает Python bridge;
-5. bridge запускает `ytrd.main.entry_point()` с аргументами как у CLI.
-
-## Сборка APK
-
-Нужны Android SDK и Gradle/Android Studio.
+Укажите SDK через `ANDROID_HOME` или `sdk.dir` в `local.properties`.
+Ключ VOT задаётся переменной окружения `VOT_HMAC_KEY` либо одноимённым
+параметром в `local.properties` (исключён из Git). Без ключа приложение
+собирается, но перевод недоступен.
 
 ```bash
-cd android-app
-./gradlew assembleDebug
+export JAVA_HOME=/путь/к/jdk17
+export PATH="$JAVA_HOME/bin:$PATH"
+./gradlew :app:assembleDebug
 ```
 
-В этом черновике Gradle Wrapper пока не добавлен, поэтому можно открыть папку `android-app` в Android Studio — она сама предложит синхронизировать проект.
+APK: `app/build/outputs/apk/debug/app-debug.apk`.
+Версия берётся из `version.properties`; правила — [VERSIONING.md](VERSIONING.md).
 
-## Текущее состояние MVP
+## Проверки (Quality Gate)
 
-Есть:
+```bash
+./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+python3 tools/check_lint.py
+```
 
-- встроенный Python через Chaquopy;
-- пакет `ytrd` внутри APK;
-- поле для ссылки;
-- диалог настроек скачивания;
-- выбор режима: Dual, Mix, Audio, Auto/original;
-- выбор качества;
-- флаги subtitles, Live Voice, quiet;
-- карточка запущенной загрузки;
-- приём ссылки через Android Share;
-- запуск `ytrd` внутри APK без Termux.
+- **75 JVM-тестов** (координатор очереди, отмена, кодек VOT, парсер метаданных, сборщик FFmpeg, хранилище, мигратор истории, настройки, URL).
+- Отчёты: `app/build/reports/`, XML результатов тестов: `app/build/test-results/`.
+- `tools/check_lint.py` контролирует бюджет предупреждений lint (80 warnings, 0 errors).
 
-## Важное ограничение
+## Архитектура
 
-`ytrd` использует внешний бинарник `ffmpeg`. Python уже встроен, но для полноценного скачивания/склейки видео нужно ещё добавить Android-совместимый FFmpeg:
+Исходники: `app/src/main/java/io/github/idex/ytrdroid/`:
 
-- либо положить `ffmpeg` binary для ABI `arm64-v8a`/`armeabi-v7a`/`x86_64` в APK и указывать его путь;
-- либо подключить FFmpeg-библиотеку/обёртку;
-- либо для первого этапа поддержать только те операции, где FFmpeg не нужен.
+- `domain/` — неизменяемые модели (`DownloadRequest`, `TaskSnapshot`, `MediaPlan`, `DownloadError`).
+- `application/` — `DownloadCoordinator` (сериализованная FIFO-очередь, ровно один активный воркер), `CancellationToken`.
+- `data/`
+  - `persistence/` — Room 2.6.1 (`AppDatabase`, `TaskDao`, `ArtifactDao`, `LegacyHistoryMigrator`);
+  - `storage/` — `WorkspaceManager` (изоляция рабочих файлов по задачам и запускам), `DestinationWriter` (защита от перезаписи, атомарное копирование);
+  - `ytdlp/` — `RuntimeManager` (готовность и single-flight обновление), `YtDlpMetadataParser` (строгий Gson-парсинг);
+  - `ffmpeg/` — `FfmpegCommandBuilder` (Mix duration=first, Dual languages, mov_text / srt);
+  - `settings/` — `SettingsRepository` (единое хранилище настроек с миграцией);
+  - `network/` — `NetworkPolicy` (проверка сети и Wi-Fi).
+- `service/` — `DownloadService`: адаптер Foreground Service, действия уведомлений привязаны к конкретному `executionId`.
+- `ui/` — экраны приложения (`MainActivity`, `DownloadsFragment`, `FilesFragment`, `ParamsFragment`, `SettingsActivity`).
+- `util/` — `ThumbnailLoader` (LRU-кэш 8 МБ, даунсэмплинг, защита от гонок в списках), `UrlUtil`.
+- `di/AppContainer` — процессный контейнер зависимостей.
 
-Также нужно отдельно доработать сохранение в публичную папку Downloads через Android Storage Access Framework. Сейчас bridge передаёт `--output` во внешний каталог приложения (`Android/data/.../files`).
-
-## Следующие задачи
-
-1. Добавить Gradle Wrapper и проверить сборку.
-2. Подключить/упаковать FFmpeg для Android.
-3. Сделать анализ видео перед скачиванием (`--check`/информация/доступные качества).
-4. Переделать `ytrd` на callback API для нормального прогресса в карточках.
-5. Добавить выбор папки сохранения через SAF.
+Документация для агентов: [AGENTS.md](AGENTS.md).
+План рефакторинга и журнал: [REFACTORING_PLAN.md](REFACTORING_PLAN.md).
+Ревью исходного состояния: [REVIEW_ANDROID.md](REVIEW_ANDROID.md).

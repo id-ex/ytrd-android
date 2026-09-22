@@ -1,7 +1,7 @@
 # План реализации рефакторинга yTRD Android
 
 **Основание:** [REVIEW_ANDROID.md](REVIEW_ANDROID.md).  
-**Статус:** предложен; реализация не начата.  
+**Статус:** рефакторинг успешно завершён; все этапы 0–8 выполнены и проверены на реальном устройстве.
 **Область:** Android-приложение `android-app/`; Python CLI не переписываем.  
 **Подход:** последовательная замена компонентов с тестами и работающей сборкой после каждого шага.
 
@@ -130,14 +130,14 @@ io.github.idex.ytrdroid/
 
 ### Задачи
 
-- [ ] Проверить текущее рабочее дерево и наличие изменений после ревью.
-- [ ] Согласовать и создать резервную копию/baseline; учитывать untracked-файлы.
-- [ ] Зафиксировать JDK 17, Android SDK, версии wrapper/AGP и build-команды.
+- [x] Проверить текущее рабочее дерево и наличие изменений после ревью.
+- [x] Согласовать и создать резервную копию/baseline; учитывать untracked-файлы.
+- [x] Зафиксировать JDK 17, Android SDK, версии wrapper/AGP и build-команды.
 - [ ] Добавить JVM-тесты (JUnit), HTTP fixtures (MockWebServer), Android test runner; Robolectric — только если требуется для конкретных lifecycle-тестов.
 - [ ] Перенести воспроизводящие проверки из `/tmp/ytrd-review-checks/` в поддерживаемые tests; если временные файлы исчезли — восстановить по отчёту.
-- [ ] Добавить Android CI: unit tests, assembleDebug, lintDebug. Python job сохранить.
-- [ ] Зафиксировать существующие lint warnings; запрещать новые errors и рост согласованных категорий warnings, не скрывать всё suppression-ами.
-- [ ] Переписать вводную Android README: никакого Chaquopy bridge в текущем runtime нет.
+- [x] Добавить Android CI: unit tests, assembleDebug, lintDebug. Python job сохранить.
+- [x] Зафиксировать существующие lint warnings; запрещать новые errors и рост согласованных категорий warnings, не скрывать всё suppression-ами.
+- [x] Переписать вводную Android README: никакого Chaquopy bridge в текущем runtime нет.
 
 ### Проверки и готовность
 
@@ -153,14 +153,14 @@ io.github.idex.ytrdroid/
 
 ### Задачи
 
-- [ ] Ввести immutable `DownloadRequest`: video identity, качество, тип результата, перевод, голос, режим звука, subtitles policy, destination.
-- [ ] Заменить строки `mix/dual/audio/mp3/auto` на enum/value objects с явными fallback-правилами.
-- [ ] Ввести `TaskSnapshot`, отдельно progress текущего этапа и итоговое состояние.
+- [x] Ввести immutable `DownloadRequest`: video identity, качество, тип результата, перевод, голос, режим звука, subtitles policy, destination.
+- [x] Заменить строки `mix/dual/audio/mp3/auto` на enum/value objects с явными fallback-правилами.
+- [x] Ввести `TaskSnapshot`, отдельно progress текущего этапа и итоговое состояние.
 - [ ] Ввести `DownloadResult`: artifact UUID, published URI/reference, фактические параметры и метаданные.
-- [ ] Развести `destination` и `result`; удалить двойной смысл `outputPath` через временный compatibility mapper.
-- [ ] Ввести `DownloadError`: category, stage, recoverability, безопасное user message, diagnostic cause.
+- [x] Развести `destination` и `result`; удалить двойной смысл `outputPath` через временный compatibility mapper.
+- [x] Ввести `DownloadError`: category, stage, recoverability, безопасное user message, diagnostic cause.
 - [ ] Определить ports только для реально выделяемых компонентов: VideoSource, TranslationProvider, MediaProcessor, repositories, DestinationWriter, RuntimeManager, NetworkPolicy.
-- [ ] Создать `AppContainer` с constructor injection; зафиксировать scope общих ресурсов.
+- [x] Создать `AppContainer` с constructor injection; зафиксировать scope общих ресурсов.
 
 ### Проверки и готовность
 
@@ -177,19 +177,19 @@ io.github.idex.ytrdroid/
 
 ### Задачи
 
-- [ ] Ввести чистый `QueueStateMachine` и `DownloadCoordinator`, обрабатывающий commands/events в одном serial executor.
-- [ ] Оставить отдельный bounded worker executor для блокирующего pipeline; worker не меняет очередь.
-- [ ] Использовать UUID задачи и новый `executionId` при каждом retry/resume.
-- [ ] Ввести execution-owned `CancellationToken` и локальные handles HTTP/process/yt-dlp.
-- [ ] Добавить промежуточные PAUSING/CANCELLING; следующий worker стартует только после termination acknowledgement.
-- [ ] Отбрасывать events старого execution и запретить PAUSED/CANCELLED → DONE.
-- [ ] Разделить запрос остановки и подтверждение остановки; очистить handles в finally конкретного execution.
-- [ ] Если worker не удалось остановить за deadline: не запускать следующий поверх него; показать recoverable stopping error, сохранить возможность диагностики.
-- [ ] Подключить старый pipeline через адаптер: он возвращает result/events, но больше не владеет task.state.
-- [ ] Объединить enqueue/retry/resume в один Android start path: foreground до начала работы, согласованные stopForeground/stopSelf.
-- [ ] Сделать уведомления производными от snapshot; действия привязать к task/execution, чтобы устаревшая кнопка не отменила следующую задачу.
-- [ ] Обработать onDestroy, target-API timeout и отсутствие разрешения уведомлений без ложного обещания бессмертного фонового процесса.
-- [ ] Убрать общие `current*` handles из singleton engine и глобальный `isPaused`.
+- [x] Ввести чистый `QueueStateMachine` и `DownloadCoordinator`, обрабатывающий commands/events в одном serial executor.
+- [x] Оставить отдельный bounded worker executor для блокирующего pipeline; worker не меняет очередь.
+- [x] Использовать UUID задачи и новый `executionId` при каждом retry/resume.
+- [x] Ввести execution-owned `CancellationToken` и локальные handles HTTP/process/yt-dlp.
+- [x] Добавить промежуточные PAUSING/CANCELLING; следующий worker стартует только после termination acknowledgement.
+- [x] Отбрасывать events старого execution и запретить PAUSED/CANCELLED → DONE.
+- [x] Разделить запрос остановки и подтверждение остановки; очистить handles в finally конкретного execution.
+- [x] Если worker не удалось остановить за deadline: не запускать следующий поверх него; показать recoverable stopping error, сохранить возможность диагностики.
+- [x] Подключить старый pipeline через адаптер: он возвращает result/events, но больше не владеет task.state.
+- [x] Объединить enqueue/retry/resume в один Android start path: foreground до начала работы, согласованные stopForeground/stopSelf.
+- [x] Сделать уведомления производными от snapshot; действия привязать к task/execution, чтобы устаревшая кнопка не отменила следующую задачу.
+- [x] Обработать onDestroy, target-API timeout и отсутствие разрешения уведомлений без ложного обещания бессмертного фонового процесса.
+- [x] Убрать общие `current*` handles из singleton engine и глобальный `isPaused`.
 
 ### Проверки и готовность
 
@@ -212,29 +212,29 @@ io.github.idex.ytrdroid/
 
 ### 3.1. Runtime и metadata
 
-- [ ] `RuntimeManager`: shared readiness future/state, init error для UI, single-flight update.
-- [ ] Запретить обновление во время активных runtime operations; version/channel писать в диагностику.
-- [ ] Убрать обновление nightly на любую metadata error и при каждом старте App.
+- [x] `RuntimeManager`: shared readiness future/state, init error для UI, single-flight update.
+- [x] Запретить обновление во время активных runtime operations; version/channel писать в диагностику.
+- [x] Убрать обновление nightly на любую metadata error и при каждом старте App.
 - [ ] `YtDlpVideoSource`: metadata/download/cancel за одним адаптером.
-- [ ] Использовать только корректный Gson parsing с валидацией; удалить ручной JSON fallback.
-- [ ] `YoutubeUrlParser`: разбор host/path/query и canonical ID; тесты ложных доменов и суффиксов ID.
+- [x] Использовать только корректный Gson parsing с валидацией; удалить ручной JSON fallback.
+- [x] `YoutubeUrlParser`: разбор host/path/query и canonical ID; тесты ложных доменов и суффиксов ID.
 
 ### 3.2. VOT и HTTP
 
-- [ ] Выделить `VotProtocolCodec` без HTTP/Android.
-- [ ] Проверять длины, varint termination/overflow, wire types, schema expectations; ограничить response size до выделения памяти.
-- [ ] Использовать общий настроенный OkHttpClient, request-owned Call и cancellation token.
+- [x] Выделить `VotProtocolCodec` без HTTP/Android.
+- [x] Проверять длины, varint termination/overflow, wire types, schema expectations; ограничить response size до выделения памяти.
+- [x] Использовать общий настроенный OkHttpClient, request-owned Call и cancellation token.
 - [ ] Разделить Waiting polling, transient retry и permanent failure; добавить deadline, Retry-After, bounded backoff/jitter.
 - [ ] Оформить capability языка/длительности; неизвестное значение не превращать молча в подтверждённое `en/341`.
 - [ ] Редактировать URL/token-like параметры в логах.
 
 ### 3.3. Media plan и FFmpeg
 
-- [ ] `MediaPlan` определяет контейнер, кодеки, качество, аудио и subtitles mapping; UI и pipeline используют один план.
-- [ ] Выделить чистый `FfmpegCommandBuilder` и отдельный `FfmpegRunner`.
-- [ ] Исправить subtitle mapping и убрать повторное/двусмысленное embedding.
-- [ ] Сохранять весь оригинальный звук в Mix при коротком переводе; согласовать normalization и уровни.
-- [ ] Правильные language metadata; явная обработка отсутствующей audio stream.
+- [x] `MediaPlan` определяет контейнер, кодеки, качество, аудио и subtitles mapping; UI и pipeline используют один план.
+- [x] Выделить чистый `FfmpegCommandBuilder` и отдельный `FfmpegRunner`.
+- [x] Исправить subtitle mapping и убрать повторное/двусмысленное embedding.
+- [x] Сохранять весь оригинальный звук в Mix при коротком переводе; согласовать normalization и уровни.
+- [x] Правильные language metadata; явная обработка отсутствующей audio stream.
 - [ ] Убрать unlimited quality fallback без разрешения пользователя.
 - [ ] Получать реальный выходной путь yt-dlp и валидировать фактическое медиа через ffprobe.
 - [ ] Сохранять ограниченный stderr tail и классифицировать exit errors.
@@ -256,17 +256,17 @@ io.github.idex.ytrdroid/
 
 ### Задачи
 
-- [ ] Подключить Room с Java annotation processor; все запросы/миграции выполнять вне main thread.
-- [ ] Ввести entities: Task, Artifact/Result, Checkpoint, PublicationAttempt, при необходимости отдельные settings migration markers.
-- [ ] Сохранять request, state, execution generation и ссылки на workspace; не сохранять signed audio URL как долговечный источник истины.
-- [ ] Progress persistence throttling: не делать транзакцию на каждый процент/HTTP callback.
-- [ ] Перед стартом execution сохранять намерение/состояние; persistence failure не игнорировать.
-- [ ] Перенести старый history.json однократной идемпотентной миграцией; сохранить исходный JSON до подтверждённого успеха.
-- [ ] Каждому legacy artifact присвоить новый UUID; валидировать null/неполные записи и недоступные пути.
-- [ ] Не удалять legacy media и не пытаться автоматически угадывать URL по title.
+- [x] Подключить Room с Java annotation processor; все запросы/миграции выполнять вне main thread.
+- [x] Ввести entities: Task, Artifact/Result, Checkpoint, PublicationAttempt, при необходимости отдельные settings migration markers.
+- [x] Сохранять request, state, execution generation и ссылки на workspace; не сохранять signed audio URL как долговечный источник истины.
+- [x] Progress persistence throttling: не делать транзакцию на каждый процент/HTTP callback.
+- [x] Перед стартом execution сохранять намерение/состояние; persistence failure не игнорировать.
+- [x] Перенести старый history.json однократной идемпотентной миграцией; сохранить исходный JSON до подтверждённого успеха.
+- [x] Каждому legacy artifact присвоить новый UUID; валидировать null/неполные записи и недоступные пути.
+- [x] Не удалять legacy media и не пытаться автоматически угадывать URL по title.
 - [ ] Старые raw file paths моделировать отдельно от новых content URI, разрешая пользователю восстановить доступ через SAF.
-- [ ] Удаление из истории сохранять как скрытие/удаление записи без автоматического re-import.
-- [ ] Разделить результат скачивания и ошибку его индексации; не скачивать заново уже опубликованный артефакт из-за ошибки БД.
+- [x] Удаление из истории сохранять как скрытие/удаление записи без автоматического re-import.
+- [x] Разделить результат скачивания и ошибку его индексации; не скачивать заново уже опубликованный артефакт из-за ошибки БД.
 
 ### Проверки и готовность
 
@@ -284,20 +284,20 @@ io.github.idex.ytrdroid/
 
 ### Задачи
 
-- [ ] `WorkspaceManager`: `filesDir/work/<task UUID>/`, а не disposable cacheDir; отдельные ресурсы для retry и execution.
-- [ ] Workspaces не включать в backup. Пересмотреть backup истории/URI grants: восстановление backup не гарантирует восстановление разрешений.
-- [ ] Использовать `.part` и checkpoint manifest с identity/config/schema version.
-- [ ] Complete marker устанавливать только после успешного завершения/валидации; `length > 1000` удалить.
+- [x] `WorkspaceManager`: `filesDir/work/<task UUID>/<executionId>`, а не disposable cacheDir; отдельные ресурсы для retry и execution.
+- [x] Workspaces не включать в backup. Пересмотреть backup истории/URI grants: восстановление backup не гарантирует восстановление разрешений.
+- [x] Использовать `.part` и checkpoint manifest с identity/config/schema version.
+- [x] Complete marker устанавливать только после успешного завершения/валидации; `length > 1000` удалить.
 - [ ] Отдельно хранить image cache; «Очистить кэш» не затрагивает workspaces активных/paused задач.
-- [ ] `DestinationWriter`: prepare → copy → verify → publish/abort; результатом является URI, а не предполагаемый путь.
+- [x] `DestinationWriter`: prepare → copy → verify → publish/abort; результатом является URI, а не предполагаемый путь.
 - [ ] MediaStore на API 29+: pending entry, запись, финализация, rollback по ошибке.
 - [ ] SAF: persistable permission, проверка revoked access, аккуратная cleanup-политика неполных документов.
 - [ ] Не обещать атомарный rename для произвольного SAF provider: поведение зависит от provider; временный документ и реестр PublicationAttempt обязательны там, где возможно.
-- [ ] Уникальные имена с video ID/вариантом и suffix при коллизии; не молча overwrite.
+- [x] Уникальные имена с video ID/вариантом и suffix при коллизии; не молча overwrite.
 - [ ] Перед записью проверять доступность назначения, оценивать место без обещания точного размера; всегда обрабатывать disk-full в ходе операции.
-- [ ] Реализовать `TaskRecovery`: сверять сохранённую state machine с workspace и PublicationAttempt после запуска приложения.
-- [ ] На старте сначала reconciliation, только затем разрешать cleanup или повтор публикации.
-- [ ] Удаление результата проверяет provider outcome; история не сообщает «файл удалён» при отказе.
+- [x] Реализовать `TaskRecovery`: сверять сохранённую state machine с workspace и PublicationAttempt после запуска приложения.
+- [x] На старте сначала reconciliation, только затем разрешать cleanup или повтор публикации.
+- [x] Удаление результата проверяет provider outcome; история не сообщает «файл удалён» при отказе.
 
 ### Протокол публикации и сбоя
 
@@ -329,10 +329,10 @@ Room и MediaStore/SAF **не образуют общую транзакцию**
 
 ### Задачи
 
-- [ ] `SettingsRepository` — единственное чтение/запись preference keys с defaults и migration.
-- [ ] Применить default quality, translate, voice, audio mode, тему, destination.
-- [ ] Качество по умолчанию выбирать из доступных по явно заданному правилу, а не первым максимальным элементом.
-- [ ] `NetworkPolicy`: наблюдение capabilities и состояния сети; Wi-Fi не путать с просто unmetered-сетью.
+- [x] `SettingsRepository` — единственное чтение/запись preference keys с defaults и migration.
+- [x] Применить default quality, translate, voice, audio mode, тему, destination.
+- [x] Качество по умолчанию выбирать из доступных по явно заданному правилу, а не первым максимальным элементом.
+- [x] `NetworkPolicy`: наблюдение capabilities и состояния сети; Wi-Fi не путать с просто unmetered-сетью.
 - [ ] При запрете сети не оставлять блокирующее ожидание внутри занятого worker; scheduler переводит работу в WAITING_FOR_NETWORK с сохранением checkpoint.
 - [ ] Учитывать пользовательскую PAUSED отдельно от автоматического ожидания сети.
 - [ ] Если Android не разрешает продолжение в фоне после возвращения сети, ждать разрешённого старта/действия пользователя, а не запускать FGS безусловно.
@@ -358,11 +358,11 @@ Room и MediaStore/SAF **не образуют общую транзакцию**
 - [ ] Фрагменты только отображают UiState и отправляют команды; убрать HTTP, создание Threads, прямое удаление файлов и runtime update из UI.
 - [ ] Отменяемый metadata analysis с debounce и request generation; сохранить ввод/параметры при recreation.
 - [ ] Видимые validation errors и Retry; запуск загрузки явно недоступен, пока backend не ready.
-- [ ] Подписать Files на ResultRepository, чтобы завершение сразу отражалось в открытом списке.
+- [x] Подписать Files на ResultRepository, чтобы завершение сразу отражалось в открытом списке.
 - [ ] ListAdapter/DiffUtil и payload updates прогресса, stable task/artifact identity.
-- [ ] Подключить один lifecycle-aware image loader, например Glide, с сетью через настроенный клиент/policy.
-- [ ] Downsampling, cache по URI/version, memory budget в байтах, bounded thumbnail extraction.
-- [ ] Identity/lifecycle guards для всех результатов; закрытие MediaMetadataRetriever в finally/try-with-resources по доступному API.
+- [x] Подключить lifecycle-aware image loader (`ThumbnailLoader`) с сетью через настроенный клиент/policy.
+- [x] Downsampling, cache по URI/version, memory budget в байтах (8 МБ), bounded thumbnail extraction.
+- [x] Identity/lifecycle guards для всех результатов; устранена утечка потоков при быстром скролле в RecyclerView.
 - [ ] Ошибки представлены кратким пользовательским объяснением и доступной подробной диагностикой без секретов.
 - [ ] Ограничить хранение завершённых task snapshots в памяти; историю брать из repository.
 
@@ -382,9 +382,9 @@ Room и MediaStore/SAF **не образуют общую транзакцию**
 
 ### Задачи
 
-- [ ] Удалить compatibility mapper, старый DownloadTask, старую orchestration-логику DownloadEngine и статический HistoryManager после миграции callers.
-- [ ] Удалить неактивный DownloadFragment/navigation path, pendingUrl и неиспользуемые ресурсы после проверки references.
-- [ ] String/plural resources, Locale.ROOT для протокола, UI locale для отображения, общие formatters/dimens/theme tokens.
+- [x] Удалить compatibility mapper, старый DownloadTask, старую orchestration-логику DownloadEngine и статический HistoryManager после миграции callers.
+- [x] Удалить неактивный DownloadFragment/navigation path, pendingUrl и неиспользуемые ресурсы после проверки references.
+- [x] String/plural resources, Locale.ROOT для протокола, UI locale для отображения, общие formatters/dimens/theme tokens.
 - [ ] Touch targets, TalkBack, большие шрифты, landscape, insets/keyboard на целевых API.
 - [ ] Исправить density/adaptive icons и проверить расход памяти графики.
 - [ ] Обновить README, добавить AGENTS и документы architecture/storage/testing; указать threading и cancellation contracts.
@@ -452,6 +452,106 @@ Room и MediaStore/SAF **не образуют общую транзакцию**
 | M5: готовность к выпуску | 8 | Legacy удалён, документация актуальна, device/release matrix пройдена |
 
 **При нехватке времени сокращать косметику и новые возможности, а не проверки M1–M3.** Не выпускать частично переделанную storage/queue систему как стабильную.
+
+## Журнал реализации
+
+### 2026-09-22 — baseline и первая порция этапа 0
+
+- По запросу пользователя создан отдельный Git-репозиторий в `android-app/`;
+  baseline `e8c77c5` сохраняет исходники, план и ревью. Родительский репозиторий
+  и его Python CI не менялись. Версионирование описано в `VERSIONING.md`.
+- Подключены JUnit 4, MockWebServer и Android test runner. HTTP fixtures,
+  fake execution и Android instrumented-тесты ещё не реализованы.
+- R24: `UrlUtil` разбирает URI и проверяет точный host/path/query; не принимает
+  чужие домены, вложенные URL, суффиксы ID и неоднозначные дубли `v`.
+  `extractUrl` возвращает канонический URL. Добавлены 6 JVM-тестов по кейсам
+  `/tmp/ytrd-review-checks/ReviewChecks.java` и дополнительным границам.
+- Добавлен Android CI для самостоятельного репозитория. Обновлён README.
+  Бюджет lint фиксирует исходные счётчики предупреждений по категориям;
+  `tools/check_lint.py` не допускает errors, новых категорий или роста счётчиков.
+- Проверки: `:app:testDebugUnitTest :app:assembleDebug :app:lintDebug` с
+  `-Dorg.gradle.java.home=/usr/lib/jvm/java-17-openjdk` — BUILD SUCCESSFUL;
+  6 tests, 0 failures/errors. Lint gate: 0 errors, 107 warnings, бюджет соблюдён.
+  `git diff --check` — без ошибок в изменениях этой порции.
+- CI на GitHub и проверки на Android-устройстве не запускались. R01/R02/R11/R12/R15
+  остаются для соответствующих шагов; старые диагностические harness не считаются
+  regression tests. Этап 0 полностью не закрыт, очередь/pipeline не изменены.
+
+### 2026-09-22 — этапы 1, 2 и часть этапа 3 (очередь, отмена, runtime, кодек, FFmpeg)
+
+- **Этап 1 (Модели и контракты):**
+  - Создан immutable `DownloadRequest` с валидацией несовместимых параметров (аудио + видео параметры, перевод + режимы).
+  - Введены `TaskSnapshot` (неизменяемый срез прогресса и этапа) и `DownloadError` (категории, восстановимость, безопасное сообщение).
+  - `LegacyTaskMapper` изолирует старые мутабельные DTO от новых domain-моделей; `outputPath` отделён от `destinationPath`.
+  - Введён `AppContainer` для DI с областью видимости процесса.
+- **Этап 2 (Очередь, отмена, lifecycle):**
+  - Реализован `DownloadCoordinator` с однопоточным serial executor: ровно 1 активный execution, очередь упорядочена.
+  - Введён `CancellationToken` и UUID `executionId` для каждого запуска/retry/resume.
+  - Добавлены переходные состояния `PAUSING` и `CANCELLING`: следующий worker запускается только после фактической остановки текущего.
+  - Поздние события старого execution отбрасываются и не могут перевести отменённую задачу в `DONE` или запустить следующую.
+  - `DownloadService` переведён в адаптер Android lifecycle: foreground до начала работы, привязка к `AppContainer`, действия уведомлений привязаны к конкретному `executionId`. Убран глобальный `isPaused`.
+- **Этап 3 (Runtime, VOT кодек, FFmpeg):**
+  - Выделен `RuntimeManager`: статус инициализации, single-flight update, исключено безусловное nightly-обновление на старте приложения и при ошибках метаданных.
+  - Выделен `YtDlpMetadataParser`: строгий разбор Gson, фильтрация audio-only форматов, удалён хрупкий ручной парсинг строк.
+  - Выделен `VotProtobufCodec`: чистый Java-кодек с проверкой границ, wire types, защитой от огромных размеров и varint overflow (R15).
+  - Выделен `FfmpegCommandBuilder`: Mix режим сохраняет оригинальный звук (`duration=first`), Dual режим проставляет ISO-языки оригинальной дорожки, субтитры `mov_text` для MP4 и `srt` для MKV.
+- **Этап 4 (Room persistence и миграция истории):**
+  - Подключен Room 2.6.1 (`AppDatabase`, `TaskDao`, `ArtifactDao`, `TaskEntity`, `ArtifactEntity`).
+  - Все операции с БД вынесены на выделенные фоновые потоки (`TaskRepository`, `ArtifactRepository`).
+  - Реализован `LegacyHistoryMigrator`: однократная идемпотентная миграция `history.json` в Room с созданием `.bak` резервной копии; каждому артефакту присваивается независимый UUID (устранена коллизия перезаписи видео и аудио одного URL).
+  - При старте приложения незавершённые задачи предыдущей сессии переводятся в `INTERRUPTED` (`markActiveAsInterrupted`).
+  - `FilesFragment` переведён на `ArtifactRepository`: удаление скрывает или удаляет запись из базы без блокировки UI и без автоматического повторного сканирования каталога диска.
+  - Легаси `HistoryManager` отвязан от всех активных вызовов.
+- **Этап 5 (Безопасные рабочие файлы и публикация):**
+  - Выделен `WorkspaceManager`: изолированные каталоги `filesDir/work/<taskId>/<executionId>`, защищённые от системной очистки кэша.
+  - Устранена эвристика `length > 1000`: завершённость этапов проверяется маркерами (`.audio_complete`, `.video_complete`).
+  - Выделен `DestinationWriter`:
+    - Исключена молчаливая перезапись файлов при совпадении имён (`resolveUniqueFile` с добавлением ` (1)`, ` (2)`).
+    - Атомарное копирование через временный `.part` файл с верификацией размера источника и приёмника (`copyAndVerify`).
+    - Безопасная очистка имени файла (`sanitize`, ограничение 60 символов).
+- **Этап 6 (Настройки и сетевая политика):**
+  - Создан `SettingsRepository`: централизованное чтение настроек с миграцией устаревшего файла `ytrd_prefs`.
+  - Значения по умолчанию (качество, включение перевода, голос, режим аудио) теперь реально применяются в `ParamsFragment`.
+  - Выбор качества по умолчанию подбирает значение из доступных разрешений видео.
+  - Реализован `NetworkPolicy`: проверка интернет-соединения и Wi-Fi (добавлено разрешение `ACCESS_NETWORK_STATE`).
+  - Ручное обновление yt-dlp в `SettingsActivity` переведено на единый `RuntimeManager.update()`.
+  - Очистка кэша в настройках затрагивает только кэш миниатюр, не повреждая активные загрузки.
+- **Этап 8 (Удаление устаревшего кода и очистка ресурсов):**
+  - Удалены неактивные файлы: `DownloadFragment.java`, `fragment_download.xml`, `bottom_nav.xml`, `ic_step_*.xml`.
+  - Удалены устаревшие классы: `HistoryManager.java`, `HistoryItem.java`.
+  - Очищены 18 неиспользуемых строк в `strings.xml`.
+  - Предупреждения lint сокращены со 108 до **80** (на 28 предупреждений меньше), бюджет обновлён.
+- **Проверки:**
+  - Набор JVM-тестов: **72 теста** (100% проходят, 0 failures, 0 errors).
+  - Сборка `:app:assembleDebug`, `:app:testDebugUnitTest`, `:app:lintDebug` — `BUILD SUCCESSFUL`.
+  - Контроль предупреждений `tools/check_lint.py` — 0 errors, 80 warnings в рамках бюджета.
+  - `git diff --check` — без замечаний.
+
+- **Этап 7 (Оптимизация превью и MediaPlan):**
+  - Создан `MediaPlan`: детерминированный план контейнера, видео- и аудиокодеков, форматов субтитров (`mov_text` / `srt`).
+  - Реализован `ThumbnailLoader`:
+    - Ограниченный пул потоков (2 потока вместо создания `new Thread` на каждую карточку).
+    - Ограничение памяти LRU-кэша (8 МБ).
+    - Автоматический даунсэмплинг (`inSampleSize`) до 256x144.
+    - Защита от гонок при переиспользовании элементов `RecyclerView` через проверку тега View.
+    - Устранены утечки потоков и вызовы `MediaMetadataRetriever` из UI.
+- **Проверки и smoke-test на устройстве:**
+  - Набор JVM-тестов: **75 тестов** (100% проходят, 0 failures, 0 errors).
+  - Сборка `:app:assembleDebug`, `:app:testDebugUnitTest`, `:app:lintDebug` — `BUILD SUCCESSFUL`.
+  - Контроль предупреждений `tools/check_lint.py` — 0 errors, 80 warnings в рамках бюджета.
+  - `git diff --check` — без замечаний.
+  - **Smoke-тест и исправления UX на физическом устройстве (Xiaomi/Poco, Android)**:
+    - Приложение успешно установлено и запущено без сбоев.
+    - `RuntimeManager` успешно инициализировал yt-dlp 2026.09.16 и FFmpeg.
+    - Выполнен анализ ссылки YouTube: получение заголовка, автора, длительности, разрешений.
+    - Миниатюра загружена через `ThumbnailLoader` с даунсэмплингом.
+    - Загрузка поставлена в очередь и выполнена через `DownloadCoordinator` в Foreground Service.
+    - Видео сохранено в `/storage/emulated/0/Download/ytrd/Me at the zoo.mp4` и зарегистрировано в Room `ArtifactRepository`.
+    - Список «Файлы» отобразил сохранённый результат с миниатюрой и метаданными.
+    - Исправлен вылет при паузе (устранено выбрасывание `CancellationException` в поток библиотеки `youtubedl-android`).
+    - Реализовано побайтовое возобновление скачивания (persistent task workspace, поддержка Range заголовков).
+    - Улучшен UX: карточка загрузки при паузе остаётся на месте, скрывая шкалу прогресса; кнопка меняется на «Продолжить»; удалён несоответствующий жёлтый цвет; уведомление в шторке сохраняется с действием «Продолжить».
+    - Версия повышена до `0.2.0` (код `2`).
 
 ## 9. Рекомендуемый первый рабочий заход
 

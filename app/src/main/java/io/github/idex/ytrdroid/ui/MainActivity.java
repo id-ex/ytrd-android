@@ -26,11 +26,6 @@ public class MainActivity extends AppCompatActivity {
         public void onServiceConnected(ComponentName c, IBinder b) {
             downloadService = ((DownloadService.LocalBinder) b).getService();
             bound = true;
-            // Notify current fragment
-            Fragment f = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
-            if (f instanceof DownloadsFragment) {
-                ((DownloadsFragment) f).onServiceConnected(downloadService);
-            }
         }
 
         @Override

@@ -2,14 +2,7 @@
 <resources>
     <string name="app_name">ytrd</string>
     <string name="settings">Настройки</string>
-    <string name="tab_download">Скачать</string>
-    <string name="tab_downloads">Загрузки</string>
-    <string name="tab_files">Файлы</string>
-    <string name="hint_url">Ссылка YouTube</string>
-    <string name="paste_url">Вставить ссылку</string>
-    <string name="recent">Недавние</string>
     <string name="btn_download">Скачать</string>
-    <string name="params_title">Параметры</string>
     <string name="label_quality">Качество</string>
     <string name="label_translation">Перевод</string>
     <string name="label_voice">Голос</string>
@@ -22,18 +15,12 @@
     <string name="mode_dual">Две дорожки</string>
     <string name="type_video">Видео</string>
     <string name="type_audio">Аудио</string>
-    <string name="cancel">Отменить</string>
     <string name="analyzing">Анализ видео…</string>
-    <string name="error_no_url">Вставь ссылку YouTube</string>
     <string name="error_invalid_url">Некорректная ссылка YouTube</string>
-    <string name="translation_available">%1$s → Русский</string>
-    <string name="translation_unavailable">Перевод недоступен</string>
     <string name="translation_not_needed">Видео уже на русском</string>
 
     <!-- Settings -->
     <string name="pref_cat_downloads">Загрузки</string>
-    <string name="pref_output_dir">Папка сохранения</string>
-    <string name="pref_output_dir_summary">Download/ytrd</string>
     <string name="pref_default_quality">Качество по умолчанию</string>
     <string name="pref_wifi_only">Только Wi-Fi</string>
     <string name="pref_wifi_only_summary">Загружать видео только по Wi-Fi</string>
@@ -49,14 +36,5 @@
 
     <string name="download_notification_channel">Загрузки</string>
     <string name="downloading">Скачивание…</string>
-    <string name="processing">Обработка…</string>
-    <string name="done">Готово</string>
     <string name="error">Ошибка</string>
-    <string name="active">Активные</string>
-    <string name="queued">В очереди</string>
-    <string name="today">Сегодня</string>
-    <string name="earlier">Ранее</string>
-    <string name="all">Все</string>
-    <string name="video">Видео</string>
-    <string name="audio">Аудио</string>
 </resources>

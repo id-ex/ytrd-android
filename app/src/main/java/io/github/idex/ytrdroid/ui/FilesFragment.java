@@ -3,12 +3,8 @@ package io.github.idex.ytrdroid.ui;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Environment;
-import android.util.LruCache;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -32,14 +28,13 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
+import io.github.idex.ytrdroid.App;
 import io.github.idex.ytrdroid.R;
-import io.github.idex.ytrdroid.model.HistoryItem;
-import io.github.idex.ytrdroid.model.HistoryManager;
+import io.github.idex.ytrdroid.data.persistence.ArtifactEntity;
 
 public class FilesFragment extends Fragment {
     private FileAdapter adapter;
     private TextView emptyText;
-    private static final LruCache<String, Bitmap> thumbCache = new LruCache<>(50);
 
     @Nullable
     @Override
@@ -67,18 +62,23 @@ public class FilesFragment extends Fragment {
 
     public void loadFiles() {
         if (getContext() == null) return;
-        List<HistoryItem> items = HistoryManager.getInstance(requireContext()).getAll();
-        if (emptyText != null) {
-            emptyText.setVisibility(items.isEmpty() ? View.VISIBLE : View.GONE);
-        }
-        if (adapter != null) {
-            adapter.setItems(items);
-        }
+        App app = (App) requireContext().getApplicationContext();
+        app.container().artifacts.getAllVisible(entities -> {
+            if (getActivity() == null) return;
+            getActivity().runOnUiThread(() -> {
+                if (emptyText != null) {
+                    emptyText.setVisibility(entities.isEmpty() ? View.VISIBLE : View.GONE);
+                }
+                if (adapter != null) {
+                    adapter.setItems(entities);
+                }
+            });
+        });
     }
 
-    private void openWithSystemApp(HistoryItem item) {
-        if (item.filePath == null) return;
-        File file = new File(item.filePath);
+    private void openWithSystemApp(ArtifactEntity item) {
+        if (item.uri == null) return;
+        File file = new File(item.uri);
         if (!file.exists()) {
             Toast.makeText(getContext(), "Файл не найден на диске", Toast.LENGTH_SHORT).show();
             return;
@@ -88,7 +88,7 @@ public class FilesFragment extends Fragment {
             Context ctx = requireContext();
             Uri uri = FileProvider.getUriForFile(ctx, ctx.getPackageName() + ".provider", file);
             Intent intent = new Intent(Intent.ACTION_VIEW);
-            String name = file.getName().toLowerCase();
+            String name = file.getName().toLowerCase(Locale.ROOT);
             String mime = (name.endsWith(".mp3") || name.endsWith(".m4a")) ? "audio/*" : "video/*";
             intent.setDataAndType(uri, mime);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -98,7 +98,7 @@ public class FilesFragment extends Fragment {
         }
     }
 
-    private void showCardMenu(View anchor, HistoryItem item) {
+    private void showCardMenu(View anchor, ArtifactEntity item) {
         PopupMenu popup = new PopupMenu(requireContext(), anchor);
         popup.getMenu().add(0, 1, 0, "Повторить загрузку");
         popup.getMenu().add(0, 2, 1, "Удалить");
@@ -116,16 +116,15 @@ public class FilesFragment extends Fragment {
         popup.show();
     }
 
-    private void repeatDownload(HistoryItem item) {
+    private void repeatDownload(ArtifactEntity item) {
         MainActivity act = (MainActivity) getActivity();
         if (act == null) return;
 
-        // Вставляем реальную ссылку на видео, если есть, иначе название
         String query = item.url != null && !item.url.isEmpty() ? item.url : item.title;
         ParamsFragment.newInstance(query).show(act.getSupportFragmentManager(), "download-sheet");
     }
 
-    private void confirmDelete(HistoryItem item) {
+    private void confirmDelete(ArtifactEntity item) {
         Context ctx = requireContext();
         View dialogView = LayoutInflater.from(ctx).inflate(R.layout.dialog_delete_confirm, null);
         AlertDialog dialog = new AlertDialog.Builder(ctx)
@@ -140,18 +139,30 @@ public class FilesFragment extends Fragment {
         Button btnOk = dialogView.findViewById(R.id.btn_ok);
         Button btnCancel = dialogView.findViewById(R.id.btn_cancel);
 
-        // "С файлом": удаляем и файл, и запись из истории
+        // "С файлом": удаляем и файл, и запись из базы данных
         btnWithFile.setOnClickListener(v -> {
-            HistoryManager.getInstance(ctx).deleteWithFile(item);
-            loadFiles();
+            if (item.uri != null) {
+                File f = new File(item.uri);
+                if (f.exists()) f.delete();
+            }
+            if (item.thumbUri != null) {
+                File t = new File(item.thumbUri);
+                if (t.exists()) t.delete();
+            }
+            App app = (App) ctx.getApplicationContext();
+            app.container().artifacts.delete(item.id, () -> {
+                if (getActivity() != null) getActivity().runOnUiThread(this::loadFiles);
+            });
             dialog.dismiss();
             Toast.makeText(ctx, "Файл удалён", Toast.LENGTH_SHORT).show();
         });
 
-        // "ОК": удаляем ТОЛЬКО запись из истории (файл на диске остаётся)
+        // "ОК": скрываем запись из истории (файл на диске остаётся)
         btnOk.setOnClickListener(v -> {
-            HistoryManager.getInstance(ctx).remove(item.id);
-            loadFiles();
+            App app = (App) ctx.getApplicationContext();
+            app.container().artifacts.hide(item.id, () -> {
+                if (getActivity() != null) getActivity().runOnUiThread(this::loadFiles);
+            });
             dialog.dismiss();
         });
 
@@ -164,10 +175,10 @@ public class FilesFragment extends Fragment {
     // ── Adapter ──
 
     class FileAdapter extends RecyclerView.Adapter<FileAdapter.VH> {
-        private List<HistoryItem> items = new ArrayList<>();
+        private List<ArtifactEntity> items = new ArrayList<>();
         private final SimpleDateFormat dateFormat = new SimpleDateFormat("d MMM, HH:mm", Locale.getDefault());
 
-        void setItems(List<HistoryItem> list) {
+        void setItems(List<ArtifactEntity> list) {
             items = list;
             notifyDataSetChanged();
         }
@@ -199,7 +210,7 @@ public class FilesFragment extends Fragment {
                 thumb = v.findViewById(R.id.item_thumb);
             }
 
-            void bind(HistoryItem item) {
+            void bind(ArtifactEntity item) {
                 title.setText(item.title != null ? item.title : "Видео");
 
                 long mb = item.fileSize / (1024 * 1024);
@@ -208,79 +219,15 @@ public class FilesFragment extends Fragment {
                 String isRu = item.isTranslated ? " · RU" : "";
                 info.setText(q + " · " + mb + " МБ · " + dateStr + isRu);
 
-                loadThumbnail(item, thumb);
+                String thumbSource = (item.thumbUri != null && new File(item.thumbUri).exists())
+                        ? item.thumbUri : item.uri;
+                io.github.idex.ytrdroid.util.ThumbnailLoader.getInstance().load(thumbSource, thumb);
 
                 itemView.setOnClickListener(v -> openWithSystemApp(item));
                 itemView.setOnLongClickListener(v -> {
                     showCardMenu(v, item);
                     return true;
                 });
-            }
-
-            private void loadThumbnail(HistoryItem item, ImageView target) {
-                if (item.filePath == null) return;
-                String path = item.filePath;
-                Bitmap cached = thumbCache.get(path);
-                if (cached != null) {
-                    target.setImageBitmap(cached);
-                    return;
-                }
-
-                // 1. Проверяем наличие файла превью рядом
-                if (item.thumbPath != null && new File(item.thumbPath).exists()) {
-                    Bitmap bmp = android.graphics.BitmapFactory.decodeFile(item.thumbPath);
-                    if (bmp != null) {
-                        thumbCache.put(path, bmp);
-                        target.setImageBitmap(bmp);
-                        return;
-                    }
-                }
-
-                File f = new File(path);
-                File thumbFile = new File(f.getParentFile(), "." + f.getName() + ".thumb.jpg");
-                if (thumbFile.exists()) {
-                    Bitmap bmp = android.graphics.BitmapFactory.decodeFile(thumbFile.getAbsolutePath());
-                    if (bmp != null) {
-                        thumbCache.put(path, bmp);
-                        target.setImageBitmap(bmp);
-                        return;
-                    }
-                }
-
-                target.setImageDrawable(null);
-
-                // 2. Системная генерация миниатюры
-                new Thread(() -> {
-                    Bitmap bmp = null;
-                    String lower = f.getName().toLowerCase();
-                    if (lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".webm")) {
-                        try {
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                                bmp = android.media.ThumbnailUtils.createVideoThumbnail(
-                                        f,
-                                        new android.util.Size(192, 108),
-                                        null
-                                );
-                            }
-                        } catch (Exception ignored) {}
-
-                        if (bmp == null) {
-                            try {
-                                MediaMetadataRetriever mmr = new MediaMetadataRetriever();
-                                mmr.setDataSource(path);
-                                bmp = mmr.getFrameAtTime(2000000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
-                                if (bmp == null) bmp = mmr.getFrameAtTime(0);
-                                mmr.release();
-                            } catch (Exception ignored) {}
-                        }
-                    }
-
-                    if (bmp != null) {
-                        thumbCache.put(path, bmp);
-                        Bitmap finalBmp = bmp;
-                        target.post(() -> target.setImageBitmap(finalBmp));
-                    }
-                }, "thumb-extractor").start();
             }
         }
     }

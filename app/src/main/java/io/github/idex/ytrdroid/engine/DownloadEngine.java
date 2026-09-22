@@ -4,10 +4,6 @@ import android.content.Context;
 import android.os.Environment;
 import android.util.Log;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.yausername.youtubedl_android.YoutubeDL;
 import com.yausername.youtubedl_android.YoutubeDLRequest;
 
@@ -36,7 +32,14 @@ import okhttp3.Response;
 public class DownloadEngine {
     private static final String TAG = "DownloadEngine";
     private final VotClient vot = new VotClient();
+    private volatile boolean cancelled;
     private volatile Thread currentThread;
+
+    private void checkCancelled() {
+        if (cancelled || Thread.currentThread().isInterrupted()) {
+            throw new java.util.concurrent.CancellationException("Execution cancelled");
+        }
+    }
     private volatile okhttp3.Call currentHttpCall;
     private volatile Process currentProcess;
     private volatile String currentProcessId;
@@ -48,20 +51,7 @@ public class DownloadEngine {
 
     /** Fetch video metadata via yt-dlp --dump-json. */
     public VideoInfo fetchInfo(Context context, String url) throws Exception {
-        try {
-            return doFetchInfo(url);
-        } catch (Exception e) {
-            String msg = e.getMessage() != null ? e.getMessage() : "";
-            Log.w(TAG, "fetchInfo failed: " + msg + ". Trying to update yt-dlp...");
-            try {
-                YoutubeDL.getInstance().updateYoutubeDL(context.getApplicationContext(),
-                        YoutubeDL.UpdateChannel._NIGHTLY);
-                return doFetchInfo(url);
-            } catch (Exception updateEx) {
-                Log.w(TAG, "Update retry failed: " + updateEx.getMessage());
-            }
-            throw e;
-        }
+        return doFetchInfo(url);
     }
 
     private VideoInfo doFetchInfo(String url) throws Exception {
@@ -73,71 +63,22 @@ public class DownloadEngine {
         com.yausername.youtubedl_android.YoutubeDLResponse resp =
                 YoutubeDL.getInstance().execute(req, null, null);
 
-        String json = resp.getOut();
-        VideoInfo info = new VideoInfo();
-        info.url = url;
-
-        // Parse JSON with Gson to properly decode all Unicode characters, quotes, etc.
-        try {
-            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
-            info.title = getJsonString(obj, "title");
-            info.uploader = getJsonString(obj, "uploader");
-            info.thumbnail = getJsonString(obj, "thumbnail");
-            info.language = getJsonString(obj, "language");
-            info.ext = getJsonString(obj, "ext");
-            if (info.ext == null) info.ext = "mp4";
-
-            if (obj.has("duration") && !obj.get("duration").isJsonNull()) {
-                info.duration = obj.get("duration").getAsLong();
-            }
-
-            // Parse formats for heights
-            info.qualities = new ArrayList<>();
-            if (obj.has("formats") && obj.get("formats").isJsonArray()) {
-                JsonArray formats = obj.getAsJsonArray("formats");
-                java.util.Set<Integer> heights = new java.util.TreeSet<>(java.util.Collections.reverseOrder());
-                for (JsonElement fElem : formats) {
-                    if (!fElem.isJsonObject()) continue;
-                    JsonObject fObj = fElem.getAsJsonObject();
-                    if (fObj.has("height") && !fObj.get("height").isJsonNull()) {
-                        int h = fObj.get("height").getAsInt();
-                        if (h >= 144) heights.add(h);
-                    }
-                }
-                for (int h : heights) info.qualities.add(String.valueOf(h));
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "Gson parse failed, falling back to manual parse: " + e.getMessage());
-            info.title = jsonString(json, "title");
-            info.uploader = jsonString(json, "uploader");
-            info.thumbnail = jsonString(json, "thumbnail");
-            info.language = jsonString(json, "language");
-            info.ext = jsonString(json, "ext");
-            if (info.ext == null) info.ext = "mp4";
-            info.qualities = parseQualities(json);
-        }
-
-        if (info.qualities == null || info.qualities.isEmpty()) {
-            info.qualities = new ArrayList<>();
-            info.qualities.add("auto");
-        }
-        return info;
-    }
-
-    private static String getJsonString(JsonObject obj, String key) {
-        if (obj.has(key) && !obj.get(key).isJsonNull()) {
-            return obj.get(key).getAsString();
-        }
-        return null;
+        return io.github.idex.ytrdroid.data.ytdlp.YtDlpMetadataParser.parse(resp.getOut(), url);
     }
 
     /** Run the full download pipeline for a task. */
     public void execute(Context context, DownloadTask task, Listener listener) {
         currentThread = Thread.currentThread();
         try {
+            checkCancelled();
+            io.github.idex.ytrdroid.data.storage.WorkspaceManager workspace =
+                    new io.github.idex.ytrdroid.data.storage.WorkspaceManager(
+                            context.getFilesDir(), task.getRequest().id,
+                            task.executionId != null ? task.executionId : java.util.UUID.randomUUID());
+
             // 1. Translation
-            File translationAudio = new File(context.getCacheDir(), "vot_audio_" + task.id + ".mp3");
-            boolean alreadyHasAudio = translationAudio.exists() && translationAudio.length() > 1000;
+            File translationAudio = workspace.getCompleteAudioFile();
+            boolean alreadyHasAudio = workspace.isAudioComplete();
 
             if (task.translate && !alreadyHasAudio) {
                 task.state = DownloadTask.State.TRANSLATING;
@@ -178,15 +119,20 @@ public class DownloadEngine {
                     Environment.DIRECTORY_DOWNLOADS), "ytrd");
             outDir.mkdirs();
 
-            String processId = "ytrd-" + task.id;
+            String baseName = io.github.idex.ytrdroid.data.storage.DestinationWriter.sanitize(
+                    task.title != null ? task.title : (isAudio ? "audio" : "video"));
+            if (task.translate) baseName += " (RU)";
+
+            String processId = "ytrd-" + task.executionId;
 
             // Audio-only with translation: download directly
             if (isAudio && task.translate && task.translationAudioUrl != null) {
                 task.stageText = "Скачивание перевода…";
                 if (listener != null) listener.onStateChanged(task);
-                String outName = sanitize(task.title != null ? task.title : "audio") + " (RU).mp3";
-                File finalFile = new File(outDir, outName);
+                File finalFile = io.github.idex.ytrdroid.data.storage.DestinationWriter.resolveUniqueFile(
+                        outDir, baseName, "mp3");
                 downloadFileWithProgress(task.translationAudioUrl, finalFile, task, listener);
+                checkCancelled();
                 task.outputPath = finalFile.getAbsolutePath();
                 task.progress = 100;
                 task.state = DownloadTask.State.DONE;
@@ -194,6 +140,7 @@ public class DownloadEngine {
 
                 saveToHistory(context, task);
                 if (listener != null) listener.onStateChanged(task);
+                workspace.cleanupExecution();
                 return;
             }
 
@@ -219,9 +166,7 @@ public class DownloadEngine {
             }
 
             // Download thumbnail for video if available
-            String baseName = sanitize(task.title != null ? task.title : "video");
-            if (task.translate) baseName += " (RU)";
-            File thumbDest = new File(outDir, "." + baseName + ".mp4.thumb.jpg");
+            File thumbDest = new File(outDir, "." + baseName + ".thumb.jpg");
             if (task.thumbnail != null && !task.thumbnail.isEmpty()) {
                 try {
                     downloadFile(task.thumbnail, thumbDest);
@@ -234,6 +179,7 @@ public class DownloadEngine {
                 task.stageText = "Скачивание перевода…";
                 if (listener != null) listener.onStateChanged(task);
                 downloadFileWithProgress(task.translationAudioUrl, translationAudio, task, listener);
+                workspace.markAudioComplete();
             }
 
             // Reset bytes for video download
@@ -242,11 +188,11 @@ public class DownloadEngine {
             task.speed = 0;
 
             // If we have translation audio, we download video to temp file, then merge with ffmpeg
-            if (translationAudio.exists() && translationAudio.length() > 1000) {
+            if (translationAudio.exists() && translationAudio.length() > 0) {
                 task.stageText = "Скачивание видео…";
                 if (listener != null) listener.onStateChanged(task);
 
-                File tempVideo = new File(context.getCacheDir(), "temp_video_" + task.id + ".mp4");
+                File tempVideo = workspace.getCompleteVideoFile();
                 req.addOption("-o", tempVideo.getAbsolutePath());
 
                 currentProcessId = processId;
@@ -269,51 +215,22 @@ public class DownloadEngine {
                 task.progress = 0;
                 if (listener != null) listener.onStateChanged(task);
 
-                File finalFile = new File(outDir, baseName + ".mp4");
+                File finalFile = io.github.idex.ytrdroid.data.storage.DestinationWriter.resolveUniqueFile(
+                        outDir, baseName, task.ext != null ? task.ext : "mp4");
 
                 File subFile = null;
                 if (task.subtitles) {
-                    subFile = findSubtitleFile(context.getCacheDir(), "temp_video_" + task.id);
+                    subFile = findSubtitleFile(workspace.getExecutionDir(), "temp_video");
                 }
 
-                List<String> ffArgs = new ArrayList<>();
-                ffArgs.add("-y");
-                ffArgs.add("-i"); ffArgs.add(tempVideo.getAbsolutePath());
-                ffArgs.add("-i"); ffArgs.add(translationAudio.getAbsolutePath());
-                if (subFile != null) {
-                    ffArgs.add("-i"); ffArgs.add(subFile.getAbsolutePath());
-                }
-
+                List<String> ffArgs;
                 if ("dual".equals(task.audioMode)) {
-                    ffArgs.add("-map"); ffArgs.add("0:v");
-                    ffArgs.add("-map"); ffArgs.add("0:a");
-                    ffArgs.add("-map"); ffArgs.add("1:a");
-                    ffArgs.add("-c:v"); ffArgs.add("copy");
-                    ffArgs.add("-c:a"); ffArgs.add("copy");
-                    ffArgs.add("-metadata:s:a:0"); ffArgs.add("title=Оригинал");
-                    ffArgs.add("-metadata:s:a:0"); ffArgs.add("language=eng");
-                    ffArgs.add("-metadata:s:a:1"); ffArgs.add("title=Перевод");
-                    ffArgs.add("-metadata:s:a:1"); ffArgs.add("language=rus");
+                    ffArgs = io.github.idex.ytrdroid.data.ffmpeg.FfmpegCommandBuilder.buildDual(
+                            tempVideo, translationAudio, subFile, task.language, task.ext, finalFile);
                 } else {
-                    // mix mode
-                    ffArgs.add("-filter_complex");
-                    ffArgs.add("[0:a]volume=0.2[orig];[1:a]volume=1.2[dub];[orig][dub]amix=inputs=2:duration=shortest[out]");
-                    ffArgs.add("-map"); ffArgs.add("0:v");
-                    ffArgs.add("-map"); ffArgs.add("[out]");
-                    ffArgs.add("-c:v"); ffArgs.add("copy");
-                    ffArgs.add("-c:a"); ffArgs.add("aac");
-                    ffArgs.add("-b:a"); ffArgs.add("128k");
+                    ffArgs = io.github.idex.ytrdroid.data.ffmpeg.FfmpegCommandBuilder.buildMix(
+                            tempVideo, translationAudio, subFile, task.language, task.ext, finalFile);
                 }
-
-                if (subFile != null) {
-                    ffArgs.add("-c:s"); ffArgs.add("mov_text");
-                    ffArgs.add("-metadata:s:s:0");
-                    ffArgs.add("language=" + (subFile.getName().contains(".ru") ? "rus" : "eng"));
-                }
-
-                ffArgs.add("-progress");
-                ffArgs.add("pipe:1");
-                ffArgs.add(finalFile.getAbsolutePath());
 
                 File noBackup = context.getNoBackupFilesDir();
                 File ffmpegLib = new File(noBackup, "youtubedl-android/packages/ffmpeg/usr/lib");
@@ -331,7 +248,9 @@ public class DownloadEngine {
                 pb.environment().put("LD_LIBRARY_PATH", ldPath);
                 pb.environment().put("PATH", System.getenv("PATH") + ":" + nativeLibDir);
                 pb.redirectErrorStream(true);
+                checkCancelled();
                 currentProcess = pb.start();
+                checkCancelled();
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(currentProcess.getInputStream()))) {
                     String line;
                     while ((line = reader.readLine()) != null) {
@@ -355,15 +274,13 @@ public class DownloadEngine {
                     throw new Exception("FFmpeg failed with exit code " + exitCode);
                 }
 
-                tempVideo.delete();
-                translationAudio.delete();
-                if (subFile != null) subFile.delete();
+                workspace.cleanupExecution();
                 task.outputPath = finalFile.getAbsolutePath();
             } else {
                 // Simple download without translation
                 task.stageText = "Скачивание видео…";
-                File finalFile = new File(outDir, baseName + (isAudio ? ".mp3" : ".mp4"));
-                req.addOption("-o", finalFile.getAbsolutePath());
+                File tempVideo = workspace.getCompleteVideoFile();
+                req.addOption("-o", tempVideo.getAbsolutePath());
 
                 currentProcessId = processId;
                 try {
@@ -377,9 +294,15 @@ public class DownloadEngine {
                 } finally {
                     currentProcessId = null;
                 }
+
+                File finalFile = io.github.idex.ytrdroid.data.storage.DestinationWriter.resolveUniqueFile(
+                        outDir, baseName, isAudio ? "mp3" : (task.ext != null ? task.ext : "mp4"));
+                io.github.idex.ytrdroid.data.storage.DestinationWriter.copyAndVerify(tempVideo, finalFile);
+                workspace.cleanupExecution();
                 task.outputPath = finalFile.getAbsolutePath();
             }
 
+            checkCancelled();
             task.progress = 100;
             task.state = DownloadTask.State.DONE;
             task.stageText = "Готово";
@@ -387,7 +310,7 @@ public class DownloadEngine {
             if (listener != null) listener.onStateChanged(task);
 
         } catch (Exception e) {
-            if (task.state == DownloadTask.State.PAUSED || task.state == DownloadTask.State.CANCELLED) {
+            if (cancelled || e instanceof java.util.concurrent.CancellationException) {
                 Log.i(TAG, "Task was paused or cancelled, ignoring exception: " + e.getMessage());
                 return;
             }
@@ -395,6 +318,22 @@ public class DownloadEngine {
             task.state = DownloadTask.State.ERROR;
             task.errorMessage = e.getMessage();
             if (listener != null) listener.onStateChanged(task);
+        } finally {
+            currentThread = null;
+            currentHttpCall = null;
+            currentProcessId = null;
+            Process process = currentProcess;
+            if (process != null) {
+                process.destroyForcibly();
+                // Acknowledge completion only after the native process terminates.
+                boolean interrupted = Thread.interrupted();
+                while (true) {
+                    try { process.waitFor(); break; }
+                    catch (InterruptedException e) { interrupted = true; }
+                }
+                if (interrupted) Thread.currentThread().interrupt();
+            }
+            currentProcess = null;
         }
     }
 
@@ -457,7 +396,8 @@ public class DownloadEngine {
     }
 
     public void cancel(DownloadTask task, boolean isPause) {
-        task.state = isPause ? DownloadTask.State.PAUSED : DownloadTask.State.CANCELLED;
+        cancelled = true;
+        vot.cancel();
         if (currentHttpCall != null) {
             try { currentHttpCall.cancel(); } catch (Exception ignored) {}
         }
@@ -473,24 +413,29 @@ public class DownloadEngine {
     }
 
     private void saveToHistory(Context context, DownloadTask task) {
+        checkCancelled();
         try {
-            io.github.idex.ytrdroid.model.HistoryItem item = new io.github.idex.ytrdroid.model.HistoryItem();
-            item.id = String.valueOf(task.url.hashCode());
-            item.url = task.url;
-            item.title = task.title;
-            item.filePath = task.outputPath;
+            io.github.idex.ytrdroid.data.persistence.ArtifactEntity entity =
+                    new io.github.idex.ytrdroid.data.persistence.ArtifactEntity();
+            entity.id = java.util.UUID.randomUUID().toString();
+            entity.taskId = task.executionId != null ? task.executionId.toString() : null;
+            entity.url = task.url != null ? task.url : "";
+            entity.title = task.title != null ? task.title : "Видео";
+            entity.uri = task.outputPath != null ? task.outputPath : "";
             if (task.outputPath != null) {
                 File f = new File(task.outputPath);
-                item.fileSize = f.length();
+                entity.fileSize = f.length();
                 File thumb = new File(f.getParentFile(), "." + f.getName() + ".thumb.jpg");
-                if (thumb.exists()) item.thumbPath = thumb.getAbsolutePath();
+                if (thumb.exists()) entity.thumbUri = thumb.getAbsolutePath();
             }
-            item.timestamp = System.currentTimeMillis();
-            item.quality = task.quality;
-            item.isTranslated = task.translate;
-            io.github.idex.ytrdroid.model.HistoryManager.getInstance(context).addOrUpdate(item);
+            entity.timestamp = System.currentTimeMillis();
+            entity.quality = task.quality;
+            entity.isTranslated = task.translate;
+            entity.hidden = false;
+            io.github.idex.ytrdroid.data.persistence.AppDatabase.getInstance(context)
+                    .artifactDao().upsert(entity);
         } catch (Exception e) {
-            Log.e(TAG, "Failed to save to history: " + e.getMessage());
+            Log.e(TAG, "Failed to save to database: " + e.getMessage());
         }
     }
 
@@ -498,24 +443,45 @@ public class DownloadEngine {
 
     private void downloadFileWithProgress(String url, File dest, DownloadTask task, Listener listener) throws Exception {
         OkHttpClient http = new OkHttpClient();
-        Request req = new Request.Builder().url(url).build();
-        currentHttpCall = http.newCall(req);
+        File parent = dest.getParentFile();
+        if (parent != null && !parent.exists()) parent.mkdirs();
+        File partFile = new File(parent, dest.getName() + ".part");
+        long existing = partFile.exists() ? partFile.length() : 0;
+
+        Request.Builder reqBuilder = new Request.Builder().url(url);
+        if (existing > 0) {
+            reqBuilder.header("Range", "bytes=" + existing + "-");
+        }
+        checkCancelled();
+        currentHttpCall = http.newCall(reqBuilder.build());
+        if (cancelled) currentHttpCall.cancel();
         try (Response resp = currentHttpCall.execute()) {
-            if (!resp.isSuccessful()) throw new Exception("HTTP " + resp.code());
-            long total = resp.body() != null ? resp.body().contentLength() : -1;
+            int code = resp.code();
+            boolean append = false;
+            long total;
+            if (code == 206) {
+                append = true;
+                long len = resp.body() != null ? resp.body().contentLength() : -1;
+                total = len > 0 ? existing + len : -1;
+            } else if (resp.isSuccessful()) {
+                append = false;
+                existing = 0;
+                total = resp.body() != null ? resp.body().contentLength() : -1;
+            } else {
+                throw new Exception("HTTP " + code);
+            }
+
             task.totalBytes = total;
-            task.downloadedBytes = 0;
+            task.downloadedBytes = existing;
             long startTime = System.currentTimeMillis();
 
             try (InputStream in = resp.body().byteStream();
-                 FileOutputStream out = new FileOutputStream(dest)) {
+                 FileOutputStream out = new FileOutputStream(partFile, append)) {
                 byte[] buf = new byte[16384];
                 int n;
                 long lastUpdate = 0;
                 while ((n = in.read(buf)) != -1) {
-                    if (task.state == DownloadTask.State.PAUSED || task.state == DownloadTask.State.CANCELLED) {
-                        return;
-                    }
+                    checkCancelled();
                     out.write(buf, 0, n);
                     task.downloadedBytes += n;
                     long now = System.currentTimeMillis();
@@ -526,14 +492,21 @@ public class DownloadEngine {
                         }
                         long elapsed = now - startTime;
                         if (elapsed > 0) {
-                            task.speed = (task.downloadedBytes * 1000.0f) / elapsed;
+                            task.speed = ((task.downloadedBytes - existing) * 1000.0f) / elapsed;
                         }
                         if (listener != null) listener.onProgress(task);
                     }
                 }
-                task.progress = 100;
-                if (listener != null) listener.onProgress(task);
+                out.flush();
+                checkCancelled();
             }
+
+            if (dest.exists()) dest.delete();
+            if (!partFile.renameTo(dest)) {
+                throw new java.io.IOException("Failed to rename partial file to " + dest.getAbsolutePath());
+            }
+            task.progress = 100;
+            if (listener != null) listener.onProgress(task);
         } finally {
             currentHttpCall = null;
         }
@@ -542,61 +515,23 @@ public class DownloadEngine {
     private void downloadFile(String url, File dest) throws Exception {
         OkHttpClient http = new OkHttpClient();
         Request req = new Request.Builder().url(url).build();
-        try (Response resp = http.newCall(req).execute()) {
+        checkCancelled();
+        currentHttpCall = http.newCall(req);
+        if (cancelled) currentHttpCall.cancel();
+        try (Response resp = currentHttpCall.execute()) {
             if (!resp.isSuccessful()) throw new Exception("HTTP " + resp.code());
             try (InputStream in = resp.body().byteStream();
                  FileOutputStream out = new FileOutputStream(dest)) {
                 byte[] buf = new byte[8192];
                 int n;
-                while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
+                while ((n = in.read(buf)) != -1) {
+                    checkCancelled();
+                    out.write(buf, 0, n);
+                }
             }
+            checkCancelled();
+        } finally {
+            currentHttpCall = null;
         }
-    }
-
-    private static String sanitize(String name) {
-        String s = name.replaceAll("[/\\\\:*?\"<>|]", "_");
-        return s.length() > 60 ? s.substring(0, 60) : s;
-    }
-
-    private static String jsonString(String json, String key) {
-        String needle = "\"" + key + "\":";
-        int i = json.indexOf(needle);
-        if (i < 0) return null;
-        i += needle.length();
-        while (i < json.length() && json.charAt(i) == ' ') i++;
-        if (i >= json.length()) return null;
-        if (json.charAt(i) == '"') {
-            int end = json.indexOf('"', i + 1);
-            if (end < 0) return null;
-            return json.substring(i + 1, end);
-        }
-        // number
-        int end = i;
-        while (end < json.length() && "0123456789.".indexOf(json.charAt(end)) >= 0) end++;
-        return json.substring(i, end);
-    }
-
-    private List<String> parseQualities(String json) {
-        List<String> qualities = new ArrayList<>();
-        // Look for height values in formats
-        int idx = 0;
-        java.util.Set<Integer> seen = new java.util.TreeSet<>(java.util.Collections.reverseOrder());
-        while ((idx = json.indexOf("\"height\":", idx)) >= 0) {
-            idx += 9;
-            while (idx < json.length() && (json.charAt(idx) == ' ' || json.charAt(idx) == '\t')) {
-                idx++;
-            }
-            int end = idx;
-            while (end < json.length() && Character.isDigit(json.charAt(end))) end++;
-            if (end > idx) {
-                try {
-                    int h = Integer.parseInt(json.substring(idx, end));
-                    if (h >= 144) seen.add(h);
-                } catch (NumberFormatException ignored) {}
-            }
-        }
-        for (int h : seen) qualities.add(String.valueOf(h));
-        if (qualities.isEmpty()) qualities.add("auto");
-        return qualities;
     }
 }

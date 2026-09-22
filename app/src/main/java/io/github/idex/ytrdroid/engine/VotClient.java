@@ -2,18 +2,17 @@ package io.github.idex.ytrdroid.engine;
 
 import android.util.Log;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+
+import static io.github.idex.ytrdroid.engine.VotProtobufCodec.*;
 
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -35,6 +34,14 @@ public class VotClient {
     private static final int RETRY_SLEEP_MS = 7000;
 
     private final OkHttpClient client;
+    private volatile okhttp3.Call activeCall;
+    private volatile boolean cancelled;
+
+    public void cancel() {
+        cancelled = true;
+        okhttp3.Call call = activeCall;
+        if (call != null) call.cancel();
+    }
 
     public VotClient() {
         client = new OkHttpClient.Builder()
@@ -88,7 +95,7 @@ public class VotClient {
             return result;
         }
         for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-            if (Thread.currentThread().isInterrupted()) {
+            if (cancelled || Thread.currentThread().isInterrupted()) {
                 TranslationResult r = new TranslationResult();
                 r.success = false;
                 r.status = "Error";
@@ -141,7 +148,10 @@ public class VotClient {
                     .header("Sec-Vtrans-Token", UUID.randomUUID().toString().replace("-", ""))
                     .build();
 
-            try (Response resp = client.newCall(req).execute()) {
+            okhttp3.Call call = client.newCall(req);
+            activeCall = call;
+            if (cancelled) call.cancel();
+            try (Response resp = call.execute()) {
                 if (!resp.isSuccessful()) {
                     TranslationResult r = new TranslationResult();
                     r.success = false;
@@ -159,6 +169,8 @@ public class VotClient {
             r.status = "Error";
             r.message = e.getMessage();
             return r;
+        } finally {
+            activeCall = null;
         }
     }
 
@@ -219,103 +231,7 @@ public class VotClient {
         return r;
     }
 
-    // ── protobuf helpers ──
-
-    private static byte[] encodeVarint(long v) {
-        if (v < 0) v += (1L << 64);
-        byte[] buf = new byte[10];
-        int i = 0;
-        while (v > 0x7F) { buf[i++] = (byte) ((v & 0x7F) | 0x80); v >>>= 7; }
-        buf[i++] = (byte) v;
-        byte[] out = new byte[i]; System.arraycopy(buf, 0, out, 0, i);
-        return out;
-    }
-
-    private static byte[] encodeTag(int field, int wireType) {
-        return encodeVarint((long) field << 3 | wireType);
-    }
-
-    private static byte[] encodeString(int field, String value) {
-        byte[] encoded = value.getBytes(StandardCharsets.UTF_8);
-        byte[] tag = encodeTag(field, 2);
-        byte[] len = encodeVarint(encoded.length);
-        return concat(tag, len, encoded);
-    }
-
-    private static byte[] encodeBool(int field, boolean value) {
-        return concat(encodeTag(field, 0), encodeVarint(value ? 1 : 0));
-    }
-
-    private static byte[] encodeDouble(int field, double value) {
-        byte[] tag = encodeTag(field, 1);
-        byte[] d = new byte[8];
-        ByteBuffer.wrap(d).order(ByteOrder.LITTLE_ENDIAN).putDouble(value);
-        return concat(tag, d);
-    }
-
-    private static byte[] encodeInt(int field, int value) {
-        return concat(encodeTag(field, 0), encodeVarint(value));
-    }
-
-    private static Map<Integer, Object> readProtobuf(byte[] data) {
-        Map<Integer, Object> fields = new HashMap<>();
-        int pos = 0;
-        while (pos < data.length) {
-            long[] vr = readVarint(data, pos); long tag = vr[0]; pos = (int) vr[1];
-            int fieldNum = (int) (tag >>> 3);
-            int wireType = (int) (tag & 0x07);
-            switch (wireType) {
-                case 0:
-                    long[] vv = readVarint(data, pos);
-                    fields.put(fieldNum, (int) vv[0]);
-                    pos = (int) vv[1];
-                    break;
-                case 1:
-                    byte[] d8 = new byte[8];
-                    System.arraycopy(data, pos, d8, 0, 8);
-                    fields.put(fieldNum, d8);
-                    pos += 8;
-                    break;
-                case 2:
-                    long[] lv = readVarint(data, pos);
-                    int len = (int) lv[0]; pos = (int) lv[1];
-                    byte[] b = new byte[len];
-                    System.arraycopy(data, pos, b, 0, len);
-                    fields.put(fieldNum, b);
-                    pos += len;
-                    break;
-                case 5:
-                    fields.put(fieldNum, new byte[]{data[pos], data[pos+1], data[pos+2], data[pos+3]});
-                    pos += 4;
-                    break;
-                default:
-                    return fields;
-            }
-        }
-        return fields;
-    }
-
-    private static long[] readVarint(byte[] data, int pos) {
-        long result = 0; int shift = 0;
-        while (pos < data.length) {
-            byte b = data[pos++];
-            result |= (long)(b & 0x7F) << shift;
-            if ((b & 0x80) == 0) break;
-            shift += 7;
-        }
-        return new long[]{result, pos};
-    }
-
-    private static Integer getInt(Map<Integer, Object> fields, int key) {
-        Object v = fields.get(key);
-        return v instanceof Integer ? (Integer) v : null;
-    }
-
-    private static String getString(Map<Integer, Object> fields, int key) {
-        Object v = fields.get(key);
-        if (v instanceof byte[]) return new String((byte[]) v, StandardCharsets.UTF_8);
-        return null;
-    }
+    // ── protobuf helpers (delegated to VotProtobufCodec) ──
 
     private String hmacSha256(byte[] data) {
         try {
@@ -329,13 +245,4 @@ public class VotClient {
             throw new RuntimeException(e);
         }
     }
-
-    private static byte[] concat(byte[]... arrays) {
-        int len = 0; for (byte[] a : arrays) len += a.length;
-        byte[] out = new byte[len]; int pos = 0;
-        for (byte[] a : arrays) { System.arraycopy(a, 0, out, pos, a.length); pos += a.length; }
-        return out;
-    }
-
-    private static byte[] append(byte[] a, byte[] b) { return concat(a, b); }
 }

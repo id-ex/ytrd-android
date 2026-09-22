@@ -1,0 +1,20 @@
+{
+  "Autofill": 1,
+  "ContentDescription": 1,
+  "DefaultLocale": 9,
+  "DisableBaselineAlignment": 1,
+  "HardcodedText": 32,
+  "IconDipSize": 1,
+  "IconDuplicatesConfig": 1,
+  "IconLauncherShape": 5,
+  "IconLocation": 1,
+  "NotifyDataSetChanged": 3,
+  "ObsoleteSdkInt": 1,
+  "Overdraw": 5,
+  "RtlEnabled": 1,
+  "RtlSymmetry": 8,
+  "SetTextI18n": 5,
+  "UnusedResources": 2,
+  "UselessParent": 1,
+  "VectorPath": 1
+}

@@ -3,8 +3,6 @@ package io.github.idex.ytrdroid.ui;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -14,7 +12,6 @@ import android.widget.ImageView;
 import android.widget.PopupMenu;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -22,19 +19,26 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
+import io.github.idex.ytrdroid.App;
 import io.github.idex.ytrdroid.R;
+import io.github.idex.ytrdroid.domain.model.TaskSnapshot;
 import io.github.idex.ytrdroid.model.DownloadTask;
+import io.github.idex.ytrdroid.model.LegacyTaskMapper;
 import io.github.idex.ytrdroid.service.DownloadService;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 
-public class DownloadsFragment extends Fragment implements DownloadService.Listener {
-    private DownloadService service;
+public class DownloadsFragment extends Fragment {
+    private final java.util.function.Consumer<List<TaskSnapshot>> snapshotObserver = snapshots -> {
+        if (getActivity() != null) {
+            getActivity().runOnUiThread(() -> updateUi(snapshots));
+        }
+    };
 
     // Active Card views
     private View activeCard;
@@ -91,36 +95,31 @@ public class DownloadsFragment extends Fragment implements DownloadService.Liste
         errorsList.setLayoutManager(new LinearLayoutManager(requireContext()));
         errorsAdapter = new ErrorsAdapter();
         errorsList.setAdapter(errorsAdapter);
-
-        MainActivity activity = (MainActivity) getActivity();
-        if (activity != null && activity.getDownloadService() != null) {
-            onServiceConnected(activity.getDownloadService());
-        }
-    }
-
-    public void onServiceConnected(DownloadService svc) {
-        service = svc;
-        service.setListener(this);
-        updateUi();
     }
 
     @Override
-    public void onTasksChanged() {
-        if (getActivity() != null) {
-            getActivity().runOnUiThread(this::updateUi);
-        }
+    public void onResume() {
+        super.onResume();
+        App app = (App) requireContext().getApplicationContext();
+        app.container().observe(snapshotObserver);
     }
 
     @Override
-    public void onDestroyView() {
-        super.onDestroyView();
-        if (service != null) service.setListener(null);
+    public void onPause() {
+        super.onPause();
+        App app = (App) requireContext().getApplicationContext();
+        app.container().detach(snapshotObserver);
     }
 
-    private void updateUi() {
-        if (service == null || getView() == null) return;
+    private void updateUi(List<TaskSnapshot> snapshots) {
+        if (getView() == null || snapshots == null) return;
 
-        List<DownloadTask> all = service.getTasks();
+        List<DownloadTask> all = new ArrayList<>();
+        for (TaskSnapshot s : snapshots) {
+            all.add(LegacyTaskMapper.fromSnapshot(s));
+        }
+        Collections.reverse(all);
+
         DownloadTask active = null;
         List<DownloadTask> queued = new ArrayList<>();
         List<DownloadTask> errors = new ArrayList<>();
@@ -128,7 +127,10 @@ public class DownloadsFragment extends Fragment implements DownloadService.Liste
         for (DownloadTask t : all) {
             if (active == null && (t.state == DownloadTask.State.DOWNLOADING
                     || t.state == DownloadTask.State.TRANSLATING
-                    || t.state == DownloadTask.State.PROCESSING)) {
+                    || t.state == DownloadTask.State.PROCESSING
+                    || t.state == DownloadTask.State.PAUSING
+                    || t.state == DownloadTask.State.CANCELLING
+                    || t.state == DownloadTask.State.PAUSED)) {
                 active = t;
             } else if (t.state == DownloadTask.State.QUEUED || t.state == DownloadTask.State.PAUSED) {
                 queued.add(t);
@@ -182,8 +184,12 @@ public class DownloadsFragment extends Fragment implements DownloadService.Liste
                 (task.translate ? " · RU" : " · Оригинал");
         activeInfo.setText(info);
 
-        // Size and speed: only display during active downloading
-        if (task.state == DownloadTask.State.PROCESSING || task.state == DownloadTask.State.TRANSLATING) {
+        boolean isPaused = task.state == DownloadTask.State.PAUSED;
+        boolean stopping = task.state == DownloadTask.State.PAUSING
+                || task.state == DownloadTask.State.CANCELLING;
+
+        // Size and speed
+        if (isPaused || task.state == DownloadTask.State.PROCESSING || task.state == DownloadTask.State.TRANSLATING) {
             activeSize.setText("");
             activeSpeed.setText("");
         } else {
@@ -191,59 +197,61 @@ public class DownloadsFragment extends Fragment implements DownloadService.Liste
             activeSpeed.setText(task.formatSpeed());
         }
 
-        // Stage text under progress bar (red accent color)
-        if (task.stageText != null && !task.stageText.isEmpty()) {
+        // Progress bar and percentage: hidden when paused as requested
+        if (isPaused) {
+            activeProgressBar.setVisibility(View.GONE);
+            activePercent.setVisibility(View.GONE);
+        } else {
+            activeProgressBar.setVisibility(View.VISIBLE);
+            activePercent.setVisibility(View.VISIBLE);
+            if (task.progress < 0) {
+                activePercent.setText("0%");
+                activeProgressBar.setIndeterminate(true);
+            } else {
+                activePercent.setText(task.formatProgress());
+                activeProgressBar.setIndeterminate(false);
+                activeProgressBar.setProgress((int) task.progress);
+            }
+        }
+
+        // Stage text under progress bar
+        if (isPaused) {
+            activeStageText.setText("На паузе");
+        } else if (task.stageText != null && !task.stageText.isEmpty()) {
             activeStageText.setText(task.stageText);
         } else {
             activeStageText.setText(task.state == DownloadTask.State.TRANSLATING ? "Перевод…" : "Скачивание…");
         }
 
-        // Progress bar and percentage
-        if (task.progress < 0) {
-            activePercent.setText("0%");
-            activeProgressBar.setIndeterminate(true);
-        } else {
-            activePercent.setText(task.formatProgress());
-            activeProgressBar.setIndeterminate(false);
-            activeProgressBar.setProgress((int) task.progress);
-        }
-
         // Thumbnail loading
         loadActiveThumbnail(task);
 
-        // Pause button: moves active task to the end of the queue
-        btnPauseActive.setText("Пауза");
-        btnPauseActive.setOnClickListener(v -> {
-            if (service != null) {
-                service.pauseCurrentTask();
-                updateUi();
-            }
-        });
+        btnPauseActive.setEnabled(!stopping);
+        btnCancelActive.setEnabled(task.state != DownloadTask.State.CANCELLING);
+
+        if (isPaused) {
+            btnPauseActive.setText("Продолжить");
+            btnPauseActive.setOnClickListener(v -> {
+                Context ctx = requireContext();
+                androidx.core.content.ContextCompat.startForegroundService(
+                        ctx, new Intent(ctx, DownloadService.class));
+                App app = (App) ctx.getApplicationContext();
+                app.container().downloads.resume(task.getRequest().id);
+            });
+        } else {
+            btnPauseActive.setText("Пауза");
+            btnPauseActive.setOnClickListener(v -> {
+                App app = (App) requireContext().getApplicationContext();
+                app.container().downloads.pause(task.getRequest().id);
+            });
+        }
 
         // Cancel button with confirmation dialog
         btnCancelActive.setOnClickListener(v -> showCancelConfirmation(task));
     }
 
     private void loadActiveThumbnail(DownloadTask task) {
-        if (task.thumbnail == null || task.thumbnail.isEmpty()) return;
-
-        new Thread(() -> {
-            try {
-                Request req = new Request.Builder().url(task.thumbnail).build();
-                try (Response resp = new OkHttpClient().newCall(req).execute()) {
-                    if (resp.isSuccessful() && resp.body() != null) {
-                        Bitmap bmp = BitmapFactory.decodeStream(resp.body().byteStream());
-                        if (getActivity() != null && bmp != null) {
-                            getActivity().runOnUiThread(() -> {
-                                if (activeThumb != null) {
-                                    activeThumb.setImageBitmap(bmp);
-                                }
-                            });
-                        }
-                    }
-                }
-            } catch (Exception ignored) {}
-        }, "active-thumb").start();
+        io.github.idex.ytrdroid.util.ThumbnailLoader.getInstance().load(task.thumbnail, activeThumb);
     }
 
     private void showCancelConfirmation(DownloadTask task) {
@@ -258,9 +266,9 @@ public class DownloadsFragment extends Fragment implements DownloadService.Liste
         }
 
         dialogView.findViewById(R.id.btn_ok).setOnClickListener(v -> {
-            if (service != null) service.cancelTask(task);
+            App app = (App) requireContext().getApplicationContext();
+            app.container().downloads.cancel(task.getRequest().id);
             dialog.dismiss();
-            updateUi();
         });
 
         dialogView.findViewById(R.id.btn_cancel).setOnClickListener(v -> dialog.dismiss());
@@ -275,52 +283,20 @@ public class DownloadsFragment extends Fragment implements DownloadService.Liste
 
         popup.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == 1) {
-                if (service != null) service.retryTask(task);
+                Context ctx = requireContext();
+                androidx.core.content.ContextCompat.startForegroundService(
+                        ctx, new Intent(ctx, DownloadService.class));
+                App app = (App) ctx.getApplicationContext();
+                app.container().downloads.retry(task.getRequest().id);
                 return true;
             } else if (item.getItemId() == 2) {
-                confirmDeleteErrorTask(task);
+                App app = (App) requireContext().getApplicationContext();
+                app.container().downloads.remove(task.getRequest().id);
                 return true;
             }
             return false;
         });
         popup.show();
-    }
-
-    private void confirmDeleteErrorTask(DownloadTask task) {
-        Context ctx = requireContext();
-        View dialogView = LayoutInflater.from(ctx).inflate(R.layout.dialog_delete_confirm, null);
-        AlertDialog dialog = new AlertDialog.Builder(ctx)
-                .setView(dialogView)
-                .create();
-
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-        }
-
-        Button btnWithFile = dialogView.findViewById(R.id.btn_delete_with_file);
-        Button btnOk = dialogView.findViewById(R.id.btn_ok);
-        Button btnCancel = dialogView.findViewById(R.id.btn_cancel);
-
-        btnWithFile.setOnClickListener(v -> {
-            if (task.outputPath != null) {
-                File f = new File(task.outputPath);
-                if (f.exists()) f.delete();
-            }
-            if (service != null) service.removeTask(task);
-            dialog.dismiss();
-            updateUi();
-            Toast.makeText(ctx, "Файл удалён", Toast.LENGTH_SHORT).show();
-        });
-
-        btnOk.setOnClickListener(v -> {
-            if (service != null) service.removeTask(task);
-            dialog.dismiss();
-            updateUi();
-        });
-
-        btnCancel.setOnClickListener(v -> dialog.dismiss());
-
-        dialog.show();
     }
 
     // ── Adapter for queued tasks ──
@@ -346,47 +322,28 @@ public class DownloadsFragment extends Fragment implements DownloadService.Liste
             DownloadTask t = items.get(position);
             holder.title.setText(t.title != null ? t.title : t.url);
             boolean isPaused = t.state == DownloadTask.State.PAUSED;
-            String stage = isPaused ? " · ⏸ На паузе" : (t.stageText != null ? " · " + t.stageText : "");
+            String stage = isPaused ? " · На паузе" : (t.stageText != null ? " · " + t.stageText : "");
             holder.info.setText((t.quality != null ? t.quality + "p" : "") + (t.translate ? " · RU" : "") + stage);
-            if (isPaused) {
-                holder.info.setTextColor(0xFFFFB300);
-            } else {
-                holder.info.setTextColor(0xFFB0B0B0);
-            }
+            holder.info.setTextColor(0xFFB0B0B0);
 
             holder.action.setVisibility(View.VISIBLE);
             holder.action.setOnClickListener(v -> {
-                if (service != null) service.cancelTask(t);
+                App app = (App) holder.itemView.getContext().getApplicationContext();
+                app.container().downloads.cancel(t.getRequest().id);
             });
 
             // Клик по задаче на паузе возобновляет её
             holder.itemView.setOnClickListener(v -> {
-                if (t.state == DownloadTask.State.PAUSED && service != null) {
-                    service.resumeTask(t);
-                    updateUi();
+                if (t.state == DownloadTask.State.PAUSED) {
+                    Context ctx = holder.itemView.getContext();
+                    androidx.core.content.ContextCompat.startForegroundService(
+                            ctx, new Intent(ctx, DownloadService.class));
+                    App app = (App) ctx.getApplicationContext();
+                    app.container().downloads.resume(t.getRequest().id);
                 }
             });
 
-            holder.action.setVisibility(View.VISIBLE);
-            holder.action.setOnClickListener(v -> {
-                if (service != null) service.cancelTask(t);
-            });
-
-            if (t.thumbnail != null && !t.thumbnail.isEmpty()) {
-                new Thread(() -> {
-                    try {
-                        Request req = new Request.Builder().url(t.thumbnail).build();
-                        try (Response resp = new OkHttpClient().newCall(req).execute()) {
-                            if (resp.isSuccessful() && resp.body() != null) {
-                                Bitmap bmp = BitmapFactory.decodeStream(resp.body().byteStream());
-                                if (getActivity() != null && bmp != null) {
-                                    getActivity().runOnUiThread(() -> holder.thumb.setImageBitmap(bmp));
-                                }
-                            }
-                        }
-                    } catch (Exception ignored) {}
-                }, "queued-thumb").start();
-            }
+            io.github.idex.ytrdroid.util.ThumbnailLoader.getInstance().load(t.thumbnail, holder.thumb);
         }
 
         @Override
@@ -434,21 +391,7 @@ public class DownloadsFragment extends Fragment implements DownloadService.Liste
             holder.info.setText("❌ " + err);
             holder.info.setTextColor(0xFFE53935);
 
-            if (t.thumbnail != null && !t.thumbnail.isEmpty()) {
-                new Thread(() -> {
-                    try {
-                        Request req = new Request.Builder().url(t.thumbnail).build();
-                        try (Response resp = new OkHttpClient().newCall(req).execute()) {
-                            if (resp.isSuccessful() && resp.body() != null) {
-                                Bitmap bmp = BitmapFactory.decodeStream(resp.body().byteStream());
-                                if (getActivity() != null && bmp != null) {
-                                    getActivity().runOnUiThread(() -> holder.thumb.setImageBitmap(bmp));
-                                }
-                            }
-                        }
-                    } catch (Exception ignored) {}
-                }, "error-thumb").start();
-            }
+            io.github.idex.ytrdroid.util.ThumbnailLoader.getInstance().load(t.thumbnail, holder.thumb);
 
             // Долгий тап — всплывающее меню: Повторить загрузку / Удалить
             holder.itemView.setOnLongClickListener(v -> {

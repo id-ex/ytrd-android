@@ -129,11 +129,11 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
             public void afterTextChanged(android.text.Editable s) {}
         });
 
-        // Setup folder
-        android.content.SharedPreferences sp = requireContext().getSharedPreferences("ytrd_prefs", Context.MODE_PRIVATE);
+        // Setup folder and defaults from SettingsRepository
+        io.github.idex.ytrdroid.App app = (io.github.idex.ytrdroid.App) requireContext().getApplicationContext();
         File defaultDir = new File(android.os.Environment.getExternalStoragePublicDirectory(
                 android.os.Environment.DIRECTORY_DOWNLOADS), "ytrd");
-        currentFolder = sp.getString(PREF_KEY_FOLDER, defaultDir.getAbsolutePath());
+        currentFolder = app.container().settings.getDownloadFolder(defaultDir);
         txtFolder.setText(formatFolderPath(currentFolder));
 
         View rowFolder = view.findViewById(R.id.row_folder);
@@ -146,6 +146,15 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                 android.R.layout.simple_spinner_dropdown_item,
                 new String[]{getString(R.string.voice_standard), getString(R.string.voice_live)});
         spinnerVoice.setAdapter(voiceAdapter);
+
+        // Apply defaults from settings
+        boolean defaultTranslate = app.container().settings.isTranslateDefault();
+        switchTranslate.setChecked(defaultTranslate);
+        int initialTranslateVis = defaultTranslate ? View.VISIBLE : View.GONE;
+        groupVoice.setVisibility(initialTranslateVis);
+        groupAudioMode.setVisibility(initialTranslateVis);
+        spinnerVoice.setSelection("live".equals(app.container().settings.getDefaultVoice()) ? 1 : 0);
+        radioAudioMode.check("dual".equals(app.container().settings.getDefaultAudioMode()) ? R.id.radio_dual : R.id.radio_mix);
 
         // Translation switch
         switchTranslate.setOnCheckedChangeListener((v, checked) -> {
@@ -250,27 +259,25 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
         spinnerQuality.setAdapter(new ArrayAdapter<>(requireContext(),
                 android.R.layout.simple_spinner_dropdown_item, qLabels));
 
-        // Load thumbnail in background
+        // Select default quality from settings if available
+        io.github.idex.ytrdroid.App appInstance = (io.github.idex.ytrdroid.App) requireContext().getApplicationContext();
+        String defaultQ = appInstance.container().settings.getDefaultQuality();
+        if (info.qualities != null && defaultQ != null) {
+            for (int i = 0; i < info.qualities.size(); i++) {
+                if (defaultQ.equals(info.qualities.get(i))) {
+                    spinnerQuality.setSelection(i);
+                    break;
+                }
+            }
+        }
+
+        // Load thumbnail using ThumbnailLoader
         if (info.thumbnail != null) {
-            new Thread(() -> {
-                try {
-                    okhttp3.Request req = new okhttp3.Request.Builder().url(info.thumbnail).build();
-                    try (okhttp3.Response resp = new okhttp3.OkHttpClient().newCall(req).execute()) {
-                        if (resp.isSuccessful() && resp.body() != null) {
-                            android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(resp.body().byteStream());
-                            if (getActivity() != null && bmp != null) {
-                                getActivity().runOnUiThread(() -> {
-                                    ImageView imgThumb = getView() != null ? getView().findViewById(R.id.img_thumb) : null;
-                                    if (imgThumb != null) {
-                                        imgThumb.setImageBitmap(bmp);
-                                        imgThumb.setVisibility(View.VISIBLE);
-                                    }
-                                });
-                            }
-                        }
-                    }
-                } catch (Exception ignored) {}
-            }, "thumb-loader").start();
+            ImageView imgThumb = getView() != null ? getView().findViewById(R.id.img_thumb) : null;
+            if (imgThumb != null) {
+                imgThumb.setVisibility(View.VISIBLE);
+                io.github.idex.ytrdroid.util.ThumbnailLoader.getInstance().load(info.thumbnail, imgThumb);
+            }
         }
 
         // Translation availability
@@ -317,16 +324,21 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
         task.duration = info.duration > 0 ? info.duration : 341.0;
         task.language = info.language != null ? info.language : "en";
 
-        task.outputPath = currentFolder;
+        task.destinationPath = currentFolder;
 
         // Save last used folder
-        requireContext().getSharedPreferences("ytrd_prefs", Context.MODE_PRIVATE)
-                .edit().putString(PREF_KEY_FOLDER, currentFolder).apply();
+        ((io.github.idex.ytrdroid.App) requireContext().getApplicationContext())
+                .container().settings.setDownloadFolder(currentFolder);
 
         // Enqueue to service
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null && activity.getDownloadService() != null) {
-            activity.getDownloadService().enqueue(task);
+            try {
+                activity.getDownloadService().enqueue(task);
+            } catch (io.github.idex.ytrdroid.domain.model.DownloadRequest.ValidationError e) {
+                Toast.makeText(requireContext(), e.getMessage(), Toast.LENGTH_LONG).show();
+                return;
+            }
             Toast.makeText(requireContext(), R.string.downloading, Toast.LENGTH_SHORT).show();
             dismiss();
             activity.openDownloads();
@@ -364,8 +376,8 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                     currentFolder = paths[which];
                     new File(currentFolder).mkdirs();
                     txtFolder.setText(formatFolderPath(currentFolder));
-                    ctx.getSharedPreferences("ytrd_prefs", Context.MODE_PRIVATE)
-                            .edit().putString(PREF_KEY_FOLDER, currentFolder).apply();
+                    io.github.idex.ytrdroid.App appInstance = (io.github.idex.ytrdroid.App) ctx.getApplicationContext();
+                    appInstance.container().settings.setDownloadFolder(currentFolder);
                 })
                 .setNegativeButton("Отмена", null)
                 .show();

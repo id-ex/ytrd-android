@@ -40,39 +40,32 @@ public class SettingsActivity extends AppCompatActivity {
             // yt-dlp version & manual updater
             Preference ytdlp = findPreference("ytdlp_version");
             if (ytdlp != null) {
-                try {
-                    String v = YoutubeDL.getInstance().version(requireContext());
-                    ytdlp.setSummary(v != null ? v : "Нажмите для обновления");
-                } catch (Exception ignored) {
-                    ytdlp.setSummary("Нажмите для обновления");
-                }
+                io.github.idex.ytrdroid.App app = (io.github.idex.ytrdroid.App) requireContext().getApplicationContext();
+                String v = app.container().runtime.getVersion();
+                ytdlp.setSummary(v != null ? v : "Нажмите для обновления");
+
                 ytdlp.setOnPreferenceClickListener(pref -> {
                     pref.setSummary("Обновление...");
                     Toast.makeText(requireContext(), "Обновление yt-dlp...", Toast.LENGTH_SHORT).show();
-                    new Thread(() -> {
-                        String newVer;
-                        String toastMsg;
-                        try {
-                            YoutubeDL.UpdateStatus s = YoutubeDL.getInstance().updateYoutubeDL(
-                                    requireContext().getApplicationContext(),
-                                    YoutubeDL.UpdateChannel._NIGHTLY);
-                            newVer = YoutubeDL.getInstance().version(requireContext());
-                            toastMsg = (s == YoutubeDL.UpdateStatus.ALREADY_UP_TO_DATE)
-                                    ? "Уже последняя версия: " + newVer
-                                    : "Обновлено до: " + newVer;
-                        } catch (Exception e) {
-                            newVer = "Ошибка: " + e.getMessage();
-                            toastMsg = newVer;
-                        }
-                        if (getActivity() != null) {
-                            String finalVer = newVer;
-                            String finalToast = toastMsg;
-                            getActivity().runOnUiThread(() -> {
-                                pref.setSummary(finalVer);
-                                Toast.makeText(requireContext(), finalToast, Toast.LENGTH_LONG).show();
+                    app.container().runtime.update(YoutubeDL.UpdateChannel._NIGHTLY)
+                            .thenAccept(msg -> {
+                                if (getActivity() != null) {
+                                    getActivity().runOnUiThread(() -> {
+                                        pref.setSummary(app.container().runtime.getVersion());
+                                        Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show();
+                                    });
+                                }
+                            })
+                            .exceptionally(ex -> {
+                                if (getActivity() != null) {
+                                    getActivity().runOnUiThread(() -> {
+                                        pref.setSummary("Ошибка обновления");
+                                        String errMsg = ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage();
+                                        Toast.makeText(requireContext(), "Ошибка: " + errMsg, Toast.LENGTH_LONG).show();
+                                    });
+                                }
+                                return null;
                             });
-                        }
-                    }, "ytdlp-manual-update").start();
                     return true;
                 });
             }

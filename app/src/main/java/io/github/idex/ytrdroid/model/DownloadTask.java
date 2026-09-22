@@ -1,7 +1,21 @@
 package io.github.idex.ytrdroid.model;
 
 public class DownloadTask {
-    public enum State { QUEUED, PAUSED, TRANSLATING, DOWNLOADING, PROCESSING, DONE, ERROR, CANCELLED }
+    public enum State { QUEUED, PAUSING, PAUSED, TRANSLATING, DOWNLOADING, PROCESSING, CANCELLING, DONE, ERROR, CANCELLED, INTERRUPTED }
+
+    private io.github.idex.ytrdroid.domain.model.DownloadRequest request;
+    public java.util.UUID executionId;
+    public String destinationPath;
+
+    public void bindRequest(io.github.idex.ytrdroid.domain.model.DownloadRequest value) {
+        if (value == null || request != null) throw new IllegalStateException("Request already bound or missing");
+        request = value;
+    }
+
+    public io.github.idex.ytrdroid.domain.model.DownloadRequest getRequest() {
+        if (request == null) throw new IllegalStateException("Task has not been enqueued");
+        return request;
+    }
 
     public long id;
     public String url;

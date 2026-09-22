@@ -13,37 +13,16 @@ import com.yausername.youtubedl_android.YoutubeDLException;
 public class App extends Application {
     private static final String TAG = "YtrdApp";
     public static final String CHANNEL_DOWNLOADS = "downloads";
+    private io.github.idex.ytrdroid.di.AppContainer container;
+
+    public io.github.idex.ytrdroid.di.AppContainer container() { return container; }
 
     @Override
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
-        initYtDlp();
-    }
-
-    private void initYtDlp() {
-        new Thread(() -> {
-            try {
-                YoutubeDL.getInstance().init(this);
-                FFmpeg.getInstance().init(this);
-                Log.i(TAG, "yt-dlp and FFmpeg initialized. Version: " + YoutubeDL.getInstance().version(this));
-
-                try {
-                    YoutubeDL.UpdateStatus status = YoutubeDL.getInstance().updateYoutubeDL(this, YoutubeDL.UpdateChannel._NIGHTLY);
-                    Log.i(TAG, "yt-dlp update status: " + status + ", new version: " + YoutubeDL.getInstance().version(this));
-                } catch (Exception e) {
-                    Log.w(TAG, "Nightly update failed, trying stable: " + e.getMessage());
-                    try {
-                        YoutubeDL.getInstance().updateYoutubeDL(this, YoutubeDL.UpdateChannel._STABLE);
-                        Log.i(TAG, "yt-dlp stable version: " + YoutubeDL.getInstance().version(this));
-                    } catch (Exception ex) {
-                        Log.w(TAG, "Stable update failed: " + ex.getMessage());
-                    }
-                }
-            } catch (YoutubeDLException e) {
-                Log.e(TAG, "Failed to init yt-dlp", e);
-            }
-        }, "ytdlp-init").start();
+        container = new io.github.idex.ytrdroid.di.AppContainer(this);
+        container.runtime.init();
     }
 
     private void createNotificationChannel() {

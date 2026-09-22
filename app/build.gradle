@@ -35,6 +35,7 @@ android {
         applicationId 'io.github.idex.ytrdroid'
         minSdk 26
         targetSdk 35
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         versionCode appVersionCode.toInteger()
         versionName appVersionName
         buildConfigField 'String', 'VOT_HMAC_KEY', groovy.json.JsonOutput.toJson(votHmacKey)
@@ -54,9 +55,18 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
 }
 
 dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+
     def ytdlAndroid = '0.18.1'
     implementation "io.github.junkfood02.youtubedl-android:library:${ytdlAndroid}"
     implementation "io.github.junkfood02.youtubedl-android:ffmpeg:${ytdlAndroid}"
@@ -67,4 +77,8 @@ dependencies {
     implementation 'androidx.preference:preference:1.2.1'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.google.code.gson:gson:2.11.0'
+
+    def roomVersion = '2.6.1'
+    implementation "androidx.room:room-runtime:${roomVersion}"
+    annotationProcessor "androidx.room:room-compiler:${roomVersion}"
 }
