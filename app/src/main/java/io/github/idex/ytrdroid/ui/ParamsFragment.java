@@ -37,7 +37,6 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
     private int analysisGeneration;
     private android.widget.EditText urlField;
     private View options;
-    private View analyzeButton;
     private static final String ARG_URL = "url";
     private VideoInfo info;
     private boolean loading = true;
@@ -88,34 +87,36 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
         view.findViewById(R.id.btn_back).setOnClickListener(v -> dismiss());
         urlField = view.findViewById(R.id.sheet_url);
         options = view.findViewById(R.id.sheet_options);
-        analyzeButton = view.findViewById(R.id.sheet_analyze);
+        View btnClearUrl = view.findViewById(R.id.btn_clear_url);
+        View btnPasteUrl = view.findViewById(R.id.btn_paste_url);
         options.setVisibility(View.GONE);
         btnDownload.setEnabled(false);
-        analyzeButton.setVisibility(View.GONE);
-        view.findViewById(R.id.sheet_paste).setVisibility(View.GONE);
         btnDownload.setVisibility(View.GONE);
         view.findViewById(R.id.img_thumb).setVisibility(View.GONE);
         txtTitle.setText("Вставьте ссылку на видео");
         txtUploader.setText("Параметры появятся после анализа ссылки");
-        analyzeButton.setOnClickListener(v -> analyze());
-        view.findViewById(R.id.sheet_paste).setOnClickListener(v -> {
+
+        btnClearUrl.setOnClickListener(v -> urlField.setText(""));
+        btnPasteUrl.setOnClickListener(v -> {
             android.content.ClipboardManager clipboard = (android.content.ClipboardManager)
                     requireContext().getSystemService(Context.CLIPBOARD_SERVICE);
             if (clipboard != null && clipboard.hasPrimaryClip()) {
                 android.content.ClipData clip = clipboard.getPrimaryClip();
-                if (clip != null && clip.getItemCount() > 0)
-                    urlField.setText(clip.getItemAt(0).coerceToText(requireContext()));
+                if (clip != null && clip.getItemCount() > 0) {
+                    CharSequence text = clip.getItemAt(0).coerceToText(requireContext());
+                    if (text != null) urlField.setText(text.toString().trim());
+                }
             }
         });
         urlField.addTextChangedListener(new android.text.TextWatcher() {
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             public void onTextChanged(CharSequence s, int start, int before, int count) {
+                btnClearUrl.setVisibility(s != null && s.length() > 0 ? View.VISIBLE : View.GONE);
                 analysisGeneration++;
                 info = null;
                 loading = true;
                 options.setVisibility(View.GONE);
                 btnDownload.setEnabled(false);
-                analyzeButton.setEnabled(true);
                 btnDownload.setVisibility(View.GONE);
                 view.findViewById(R.id.img_thumb).setVisibility(View.GONE);
                 txtTitle.setText("Вставьте ссылку на видео");
@@ -196,7 +197,6 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
         final int generation = ++analysisGeneration;
         loading = true;
         btnDownload.setEnabled(false);
-        analyzeButton.setEnabled(false);
         txtTitle.setText(R.string.analyzing);
         txtUploader.setText("");
         Context ctx = requireContext().getApplicationContext();
@@ -208,7 +208,6 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                     getActivity().runOnUiThread(() -> {
                         if (getView() == null || generation != analysisGeneration) return;
                         info = result;
-                        analyzeButton.setEnabled(true);
                         options.setVisibility(View.VISIBLE);
                         btnDownload.setEnabled(true);
                         btnDownload.setVisibility(View.VISIBLE);
@@ -219,7 +218,6 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                 if (getActivity() != null) {
                     getActivity().runOnUiThread(() -> {
                         if (getView() == null || generation != analysisGeneration) return;
-                        analyzeButton.setEnabled(true);
                         txtTitle.setText(R.string.error);
                         txtUploader.setText(e.getMessage());
                     });

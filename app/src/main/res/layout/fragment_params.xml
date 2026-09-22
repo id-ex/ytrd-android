@@ -39,23 +39,43 @@
                 android:paddingStart="8dp" />
         </LinearLayout>
 
-        <EditText
-            android:id="@+id/sheet_url"
+        <!-- URL Input Row: [ EditText ] [ Clear cross ] [ Paste icon ] -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Ссылка YouTube"
-            android:inputType="textUri"
-            android:singleLine="true"
-            android:minHeight="48dp" />
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content">
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/sheet_paste"
-                android:layout_width="0dp" android:layout_weight="1"
-                android:layout_height="wrap_content" android:text="Вставить" />
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/sheet_analyze"
-                android:layout_width="0dp" android:layout_weight="1"
-                android:layout_height="wrap_content" android:text="Продолжить" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <EditText
+                android:id="@+id/sheet_url"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="Ссылка YouTube"
+                android:inputType="textUri"
+                android:singleLine="true"
+                android:minHeight="48dp" />
+
+            <ImageButton
+                android:id="@+id/btn_clear_url"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_close"
+                android:scaleType="centerInside"
+                android:visibility="gone"
+                android:contentDescription="Очистить" />
+
+            <ImageButton
+                android:id="@+id/btn_paste_url"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_paste"
+                android:scaleType="centerInside"
+                android:contentDescription="Вставить из буфера" />
         </LinearLayout>
         <!-- Video preview card -->
         <LinearLayout
