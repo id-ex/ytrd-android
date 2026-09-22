@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_dark">#FF121212</color>
+    <color name="surface_dark">#FF1E1E1E</color>
+    <color name="card_dark">#FF2A2A2A</color>
+    <color name="accent">#FFE53935</color>
+    <color name="accent_dark">#FFB71C1C</color>
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#FFB0B0B0</color>
+    <color name="text_hint">#FF808080</color>
+    <color name="divider">#FF3A3A3A</color>
+    <color name="progress_bg">#FF3A3A3A</color>
+    <color name="translation_ok">#FF4CAF50</color>
+</resources>

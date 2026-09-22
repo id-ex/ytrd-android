@@ -1,0 +1,70 @@
+plugins {
+    id 'com.android.application'
+}
+
+def appVersion = new Properties()
+rootProject.file('version.properties').withInputStream { appVersion.load(it) }
+def appVersionName = appVersion.getProperty('VERSION_NAME', '')
+def appVersionCode = appVersion.getProperty('VERSION_CODE', '')
+if (!(appVersionName ==~ /(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)/)) {
+    throw new GradleException('VERSION_NAME must use MAJOR.MINOR.PATCH format')
+}
+if (!(appVersionCode ==~ /[1-9][0-9]*/) ||
+        new BigInteger(appVersionCode) > 2100000000) {
+    throw new GradleException('VERSION_CODE must be an integer between 1 and 2100000000')
+}
+
+def localConfig = new Properties()
+def localConfigFile = rootProject.file('local.properties')
+if (localConfigFile.exists()) {
+    localConfigFile.withInputStream { localConfig.load(it) }
+}
+def votHmacKey = System.getenv('VOT_HMAC_KEY') ?: localConfig.getProperty('VOT_HMAC_KEY', '')
+if (!votHmacKey) {
+    logger.warn('VOT_HMAC_KEY is not configured; voice-over translation will be unavailable')
+}
+
+android {
+    buildFeatures {
+        buildConfig true
+    }
+    namespace 'io.github.idex.ytrdroid'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'io.github.idex.ytrdroid'
+        minSdk 26
+        targetSdk 35
+        versionCode appVersionCode.toInteger()
+        versionName appVersionName
+        buildConfigField 'String', 'VOT_HMAC_KEY', groovy.json.JsonOutput.toJson(votHmacKey)
+
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    def ytdlAndroid = '0.18.1'
+    implementation "io.github.junkfood02.youtubedl-android:library:${ytdlAndroid}"
+    implementation "io.github.junkfood02.youtubedl-android:ffmpeg:${ytdlAndroid}"
+
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    implementation 'androidx.preference:preference:1.2.1'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'com.google.code.gson:gson:2.11.0'
+}

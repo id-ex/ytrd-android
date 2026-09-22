@@ -1,0 +1,16 @@
+.gradle/
+**/build/
+local.properties
+*.jks
+*.keystore
+.env
+.env.*
+!.env.example
+cookies*.txt
+*.pem
+*.key
+key.properties
+keystore.properties
+*.log
+.idea/
+*.iml
