@@ -36,5 +36,7 @@
 
     <string name="download_notification_channel">Загрузки</string>
     <string name="downloading">Скачивание…</string>
+    <string name="status_paused_count">На паузе · %1$d</string>
+    <string name="status_queued_count">В очереди · %1$d</string>
     <string name="error">Ошибка</string>
 </resources>

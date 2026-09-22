@@ -129,8 +129,7 @@ public class DownloadsFragment extends Fragment {
                     || t.state == DownloadTask.State.TRANSLATING
                     || t.state == DownloadTask.State.PROCESSING
                     || t.state == DownloadTask.State.PAUSING
-                    || t.state == DownloadTask.State.CANCELLING
-                    || t.state == DownloadTask.State.PAUSED)) {
+                    || t.state == DownloadTask.State.CANCELLING)) {
                 active = t;
             } else if (t.state == DownloadTask.State.QUEUED || t.state == DownloadTask.State.PAUSED) {
                 queued.add(t);
@@ -162,7 +161,18 @@ public class DownloadsFragment extends Fragment {
         } else {
             labelQueued.setVisibility(View.VISIBLE);
             queuedList.setVisibility(View.VISIBLE);
-            labelQueued.setText("В очереди · " + queued.size());
+            boolean allPaused = true;
+            for (DownloadTask q : queued) {
+                if (q.state != DownloadTask.State.PAUSED) {
+                    allPaused = false;
+                    break;
+                }
+            }
+            if (allPaused) {
+                labelQueued.setText(getString(R.string.status_paused_count, queued.size()));
+            } else {
+                labelQueued.setText(getString(R.string.status_queued_count, queued.size()));
+            }
             queuedAdapter.setItems(queued);
         }
 
