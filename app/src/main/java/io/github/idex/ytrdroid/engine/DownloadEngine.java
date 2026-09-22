@@ -115,9 +115,25 @@ public class DownloadEngine {
             task.stageText = isAudio ? "Скачивание аудио…" : "Скачивание видео…";
             if (listener != null) listener.onStateChanged(task);
 
-            File outDir = new File(Environment.getExternalStoragePublicDirectory(
-                    Environment.DIRECTORY_DOWNLOADS), "ytrd");
-            outDir.mkdirs();
+            String destination = task.destinationPath;
+            boolean documentTree = destination != null && destination.startsWith("content://");
+            if (documentTree) {
+                boolean granted = false;
+                for (android.content.UriPermission permission : context.getContentResolver().getPersistedUriPermissions()) {
+                    if (permission.getUri().toString().equals(destination) && permission.isWritePermission()) {
+                        granted = true;
+                        break;
+                    }
+                }
+                if (!granted) throw new java.io.IOException("Доступ к папке отозван. Выберите папку заново.");
+            }
+            File outDir = documentTree ? new File(workspace.ensureTaskDir(), "publish")
+                    : destination != null && !destination.isEmpty() ? new File(destination)
+                    : new File(Environment.getExternalStoragePublicDirectory(
+                            Environment.DIRECTORY_DOWNLOADS), "ytrd");
+            if (!outDir.isDirectory() && !outDir.mkdirs()) {
+                throw new java.io.IOException("Нет доступа к папке сохранения. Выберите папку заново.");
+            }
 
             String baseName = io.github.idex.ytrdroid.data.storage.DestinationWriter.sanitize(
                     task.title != null ? task.title : (isAudio ? "audio" : "video"));
@@ -133,7 +149,10 @@ public class DownloadEngine {
                         outDir, baseName, "mp3");
                 downloadFileWithProgress(task.translationAudioUrl, finalFile, task, listener);
                 checkCancelled();
-                task.outputPath = finalFile.getAbsolutePath();
+                task.outputPath = documentTree
+                        ? io.github.idex.ytrdroid.data.storage.TreePublisher.publish(context, destination, finalFile, this::checkCancelled)
+                        : finalFile.getAbsolutePath();
+                if (documentTree) finalFile.delete();
                 task.progress = 100;
                 task.state = DownloadTask.State.DONE;
                 task.stageText = "Готово";
@@ -161,12 +180,16 @@ public class DownloadEngine {
 
             if (task.subtitles) {
                 req.addOption("--write-subs");
+                req.addOption("--write-auto-subs");
                 req.addOption("--sub-langs", "ru,en");
                 req.addOption("--embed-subs");
+                // --write-subs retains sidecar files for the subsequent translation merge.
             }
 
             // Download thumbnail for video if available
-            File thumbDest = new File(outDir, "." + baseName + ".thumb.jpg");
+            File thumbDir = new File(context.getFilesDir(), "thumbnails");
+            if (!thumbDir.isDirectory()) thumbDir.mkdirs();
+            File thumbDest = new File(thumbDir, task.getRequest().id + ".jpg");
             if (task.thumbnail != null && !task.thumbnail.isEmpty()) {
                 try {
                     downloadFile(task.thumbnail, thumbDest);
@@ -220,7 +243,7 @@ public class DownloadEngine {
 
                 File subFile = null;
                 if (task.subtitles) {
-                    subFile = findSubtitleFile(workspace.getExecutionDir(), "temp_video");
+                    subFile = findSubtitleFile(workspace.getTaskDir(), "temp_video");
                 }
 
                 List<String> ffArgs;
@@ -277,9 +300,10 @@ public class DownloadEngine {
                 workspace.cleanupExecution();
                 task.outputPath = finalFile.getAbsolutePath();
             } else {
-                // Simple download without translation
-                task.stageText = "Скачивание видео…";
-                File tempVideo = workspace.getCompleteVideoFile();
+                // Audio extraction produces an mp3, not the original mp4 template.
+                task.stageText = isAudio ? "Скачивание аудио…" : "Скачивание видео…";
+                File tempVideo = isAudio ? new File(workspace.ensureTaskDir(), "original.mp3")
+                        : workspace.getCompleteVideoFile();
                 req.addOption("-o", tempVideo.getAbsolutePath());
 
                 currentProcessId = processId;
@@ -303,6 +327,14 @@ public class DownloadEngine {
             }
 
             checkCancelled();
+            if (documentTree) {
+                task.stageText = "Сохранение в выбранную папку…";
+                if (listener != null) listener.onStateChanged(task);
+                File localResult = new File(task.outputPath);
+                task.outputPath = io.github.idex.ytrdroid.data.storage.TreePublisher.publish(
+                        context, destination, localResult, this::checkCancelled);
+                localResult.delete();
+            }
             task.progress = 100;
             task.state = DownloadTask.State.DONE;
             task.stageText = "Готово";
@@ -422,12 +454,22 @@ public class DownloadEngine {
             entity.url = task.url != null ? task.url : "";
             entity.title = task.title != null ? task.title : "Видео";
             entity.uri = task.outputPath != null ? task.outputPath : "";
-            if (task.outputPath != null) {
+            if (task.outputPath != null && task.outputPath.startsWith("content://")) {
+                try (android.database.Cursor cursor = context.getContentResolver().query(
+                        android.net.Uri.parse(task.outputPath),
+                        new String[]{android.provider.OpenableColumns.SIZE}, null, null, null)) {
+                    if (cursor != null && cursor.moveToFirst()) entity.fileSize = cursor.getLong(0);
+                }
+                entity.thumbUri = task.thumbnail;
+            } else if (task.outputPath != null) {
                 File f = new File(task.outputPath);
                 entity.fileSize = f.length();
                 File thumb = new File(f.getParentFile(), "." + f.getName() + ".thumb.jpg");
                 if (thumb.exists()) entity.thumbUri = thumb.getAbsolutePath();
             }
+            File savedThumb = new File(context.getFilesDir(), "thumbnails/" + task.getRequest().id + ".jpg");
+            if (savedThumb.isFile() && savedThumb.length() > 0) entity.thumbUri = savedThumb.getAbsolutePath();
+            else if (task.thumbnail != null && !task.thumbnail.isEmpty()) entity.thumbUri = task.thumbnail;
             entity.timestamp = System.currentTimeMillis();
             entity.quality = task.quality;
             entity.isTranslated = task.translate;

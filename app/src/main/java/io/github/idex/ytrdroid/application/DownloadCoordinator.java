@@ -210,6 +210,7 @@ public final class DownloadCoordinator {
     private boolean owns(Execution execution) { return active == execution; }
 
     private static TaskSnapshot failed(TaskSnapshot old, Exception failure) {
+        failure.printStackTrace();
         return new TaskSnapshot(old.request, old.executionId, ERROR, old.progress,
                 old.downloadedBytes, old.totalBytes, 0, "Ошибка загрузки", old.resultReference,
                 new DownloadError(DownloadError.Category.INTERNAL, DownloadError.Stage.DOWNLOAD,

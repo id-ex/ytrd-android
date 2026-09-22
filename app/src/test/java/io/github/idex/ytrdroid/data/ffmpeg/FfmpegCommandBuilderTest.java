@@ -48,6 +48,26 @@ public class FfmpegCommandBuilderTest {
         assertTrue(cmd.contains("title=Перевод"));
     }
 
+    @Test
+    public void mapsExternalSubtitlesInBothModesAndContainers() throws Exception {
+        File subtitles = File.createTempFile("captions.ru.", ".srt");
+        try {
+            for (String container : new String[]{"mp4", "mkv"}) {
+                for (List<String> cmd : java.util.Arrays.asList(
+                        FfmpegCommandBuilder.buildMix(video, audio, subtitles, "en", container, outMp4),
+                        FfmpegCommandBuilder.buildDual(video, audio, subtitles, "en", container, outMkv))) {
+                    int mapping = cmd.indexOf("2:s:0");
+                    assertTrue(mapping > 0);
+                    assertEquals("-map", cmd.get(mapping - 1));
+                    assertEquals("mkv".equals(container) ? "srt" : "mov_text", cmd.get(cmd.indexOf("-c:s") + 1));
+                    assertTrue(cmd.contains("language=rus"));
+                }
+            }
+        } finally {
+            subtitles.delete();
+        }
+    }
+
     @Test(expected = IllegalArgumentException.class)
     public void rejectsNullInputs() {
         FfmpegCommandBuilder.buildMix(null, audio, null, "en", "mp4", outMp4);

@@ -63,7 +63,7 @@ public final class LegacyTaskMapper {
     public static TaskSnapshot snapshot(DownloadTask task) {
         DownloadError error = task.state == DownloadTask.State.ERROR
                 ? new DownloadError(DownloadError.Category.INTERNAL, DownloadError.Stage.DOWNLOAD,
-                    true, "Не удалось завершить загрузку", null) : null;
+                    true, task.errorMessage != null ? task.errorMessage : "Не удалось завершить загрузку", null) : null;
         return new TaskSnapshot(task.getRequest(), task.executionId,
                 TaskSnapshot.State.valueOf(task.state.name()), task.progress,
                 task.downloadedBytes, task.totalBytes, task.speed, task.stageText, task.outputPath, error);

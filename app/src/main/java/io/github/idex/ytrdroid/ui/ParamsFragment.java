@@ -50,6 +50,21 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
     private MaterialButtonToggleGroup toggleType;
     private static final String PREF_KEY_FOLDER = "last_download_folder";
     private String currentFolder;
+    private final androidx.activity.result.ActivityResultLauncher<android.net.Uri> folderPicker =
+            registerForActivityResult(new androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree(), uri -> {
+                if (uri == null) return;
+                try {
+                    requireContext().getContentResolver().takePersistableUriPermission(uri,
+                            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                            android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                    currentFolder = uri.toString();
+                    ((io.github.idex.ytrdroid.App) requireContext().getApplicationContext())
+                            .container().settings.setDownloadFolder(currentFolder);
+                    if (txtFolder != null) txtFolder.setText(formatFolderPath(currentFolder));
+                } catch (SecurityException e) {
+                    Toast.makeText(requireContext(), "Не удалось получить доступ к папке", Toast.LENGTH_LONG).show();
+                }
+            });
     private MaterialButton btnDownload;
 
     public static ParamsFragment newInstance(String url) {
@@ -345,6 +360,12 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
 
     private String formatFolderPath(String path) {
         if (path == null) return "Download/ytrd";
+        if (path.startsWith("content://")) {
+            String documentId = android.provider.DocumentsContract.getTreeDocumentId(android.net.Uri.parse(path));
+            int separator = documentId.indexOf(':');
+            return separator >= 0 && separator + 1 < documentId.length()
+                    ? documentId.substring(separator + 1) : documentId;
+        }
         if (path.contains("Download")) {
             int idx = path.indexOf("Download");
             return path.substring(idx);
@@ -353,31 +374,7 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
     }
 
     private void showFolderPicker() {
-        Context ctx = requireContext();
-        String[] options = {
-                "Download/ytrd (по умолчанию)",
-                "Download",
-                "Movies/ytrd",
-                "Music/ytrd"
-        };
-        File ext = android.os.Environment.getExternalStorageDirectory();
-        String[] paths = {
-                new File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "ytrd").getAbsolutePath(),
-                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS).getAbsolutePath(),
-                new File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MOVIES), "ytrd").getAbsolutePath(),
-                new File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MUSIC), "ytrd").getAbsolutePath()
-        };
-
-        new android.app.AlertDialog.Builder(ctx)
-                .setTitle("Папка загрузки")
-                .setItems(options, (d, which) -> {
-                    currentFolder = paths[which];
-                    new File(currentFolder).mkdirs();
-                    txtFolder.setText(formatFolderPath(currentFolder));
-                    io.github.idex.ytrdroid.App appInstance = (io.github.idex.ytrdroid.App) ctx.getApplicationContext();
-                    appInstance.container().settings.setDownloadFolder(currentFolder);
-                })
-                .setNegativeButton("Отмена", null)
-                .show();
+        folderPicker.launch(currentFolder != null && currentFolder.startsWith("content://")
+                ? android.net.Uri.parse(currentFolder) : null);
     }
 }

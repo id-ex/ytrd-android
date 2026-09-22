@@ -6,8 +6,8 @@ def appVersion = new Properties()
 rootProject.file('version.properties').withInputStream { appVersion.load(it) }
 def appVersionName = appVersion.getProperty('VERSION_NAME', '')
 def appVersionCode = appVersion.getProperty('VERSION_CODE', '')
-if (!(appVersionName ==~ /(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)/)) {
-    throw new GradleException('VERSION_NAME must use MAJOR.MINOR.PATCH format')
+if (!(appVersionName ==~ /(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?/)) {
+    throw new GradleException('VERSION_NAME must use MAJOR.MINOR.PATCH format (with optional prerelease suffix, e.g. -alpha)')
 }
 if (!(appVersionCode ==~ /[1-9][0-9]*/) ||
         new BigInteger(appVersionCode) > 2100000000) {
@@ -32,7 +32,7 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId 'io.github.idex.ytrdroid'
+        applicationId 'com.idex.ytrd'
         minSdk 26
         targetSdk 35
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'

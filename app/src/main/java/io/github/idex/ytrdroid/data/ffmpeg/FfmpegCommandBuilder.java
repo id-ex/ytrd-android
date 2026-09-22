@@ -84,6 +84,8 @@ public final class FfmpegCommandBuilder {
 
     private static void appendSubtitles(List<String> args, boolean hasSub, File subtitleInput, String container) {
         if (!hasSub) return;
+        args.add("-map");
+        args.add("2:s:0");
         boolean isMkv = "mkv".equalsIgnoreCase(container);
         args.add("-c:s");
         args.add(isMkv ? "srt" : "mov_text");

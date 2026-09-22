@@ -79,17 +79,23 @@ public class FilesFragment extends Fragment {
     private void openWithSystemApp(ArtifactEntity item) {
         if (item.uri == null) return;
         File file = new File(item.uri);
-        if (!file.exists()) {
+        boolean document = item.uri.startsWith("content://");
+        if (!document && !file.exists()) {
             Toast.makeText(getContext(), "Файл не найден на диске", Toast.LENGTH_SHORT).show();
             return;
         }
 
         try {
             Context ctx = requireContext();
-            Uri uri = FileProvider.getUriForFile(ctx, ctx.getPackageName() + ".provider", file);
+            Uri uri = document ? Uri.parse(item.uri)
+                    : FileProvider.getUriForFile(ctx, ctx.getPackageName() + ".provider", file);
             Intent intent = new Intent(Intent.ACTION_VIEW);
             String name = file.getName().toLowerCase(Locale.ROOT);
             String mime = (name.endsWith(".mp3") || name.endsWith(".m4a")) ? "audio/*" : "video/*";
+            if (document) {
+                String resolved = ctx.getContentResolver().getType(uri);
+                if (resolved != null) mime = resolved;
+            }
             intent.setDataAndType(uri, mime);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivity(Intent.createChooser(intent, "Открыть через"));
@@ -141,9 +147,17 @@ public class FilesFragment extends Fragment {
 
         // "С файлом": удаляем и файл, и запись из базы данных
         btnWithFile.setOnClickListener(v -> {
-            if (item.uri != null) {
-                File f = new File(item.uri);
-                if (f.exists()) f.delete();
+            try {
+                if (item.uri != null && item.uri.startsWith("content://")) {
+                    if (!android.provider.DocumentsContract.deleteDocument(ctx.getContentResolver(), Uri.parse(item.uri)))
+                        throw new java.io.IOException("Провайдер не удалил файл");
+                } else if (item.uri != null) {
+                    File f = new File(item.uri);
+                    if (f.exists() && !f.delete()) throw new java.io.IOException("Нет доступа к файлу");
+                }
+            } catch (Exception e) {
+                Toast.makeText(ctx, "Не удалось удалить файл: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                return;
             }
             if (item.thumbUri != null) {
                 File t = new File(item.thumbUri);
@@ -219,7 +233,8 @@ public class FilesFragment extends Fragment {
                 String isRu = item.isTranslated ? " · RU" : "";
                 info.setText(q + " · " + mb + " МБ · " + dateStr + isRu);
 
-                String thumbSource = (item.thumbUri != null && new File(item.thumbUri).exists())
+                String thumbSource = (item.thumbUri != null && (item.thumbUri.startsWith("https://")
+                        || item.thumbUri.startsWith("content://") || new File(item.thumbUri).exists()))
                         ? item.thumbUri : item.uri;
                 io.github.idex.ytrdroid.util.ThumbnailLoader.getInstance().load(thumbSource, thumb);
 

@@ -86,6 +86,18 @@ public final class ThumbnailLoader {
             try {
                 if (key.startsWith("http://") || key.startsWith("https://")) {
                     bmp = loadNetwork(key);
+                } else if (key.startsWith("content://")) {
+                    android.media.MediaMetadataRetriever retriever = new android.media.MediaMetadataRetriever();
+                    try {
+                        retriever.setDataSource(target.getContext().getApplicationContext(), android.net.Uri.parse(key));
+                        Bitmap frame = retriever.getFrameAtTime();
+                        if (frame != null) {
+                            bmp = ThumbnailUtils.extractThumbnail(frame, TARGET_WIDTH, TARGET_HEIGHT,
+                                    ThumbnailUtils.OPTIONS_RECYCLE_INPUT);
+                        }
+                    } finally {
+                        retriever.release();
+                    }
                 } else {
                     bmp = loadLocal(key);
                 }
