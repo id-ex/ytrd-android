@@ -81,6 +81,20 @@ public class VotClient {
     }
 
     /**
+     * Single check of VOT translation status without polling.
+     */
+    public TranslationResult checkStatus(String url, double duration, boolean liveVoice, String sourceLang) {
+        if (HMAC_KEY.length == 0) {
+            TranslationResult r = new TranslationResult();
+            r.success = false;
+            r.status = "Error";
+            r.message = "VOT_HMAC_KEY не настроен";
+            return r;
+        }
+        return translateOnce(url, duration, liveVoice, sourceLang);
+    }
+
+    /**
      * Poll the VOT API until translation is ready or fails.
      * Calls progressCallback with attempt number.
      */

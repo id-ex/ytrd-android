@@ -211,10 +211,16 @@ public final class DownloadCoordinator {
 
     private static TaskSnapshot failed(TaskSnapshot old, Exception failure) {
         failure.printStackTrace();
+        String message = (failure.getMessage() != null && !failure.getMessage().trim().isEmpty())
+                ? failure.getMessage()
+                : "Не удалось завершить загрузку";
+        DownloadError.Category category = (failure instanceof java.io.IOException)
+                ? DownloadError.Category.NETWORK
+                : DownloadError.Category.INTERNAL;
         return new TaskSnapshot(old.request, old.executionId, ERROR, old.progress,
                 old.downloadedBytes, old.totalBytes, 0, "Ошибка загрузки", old.resultReference,
-                new DownloadError(DownloadError.Category.INTERNAL, DownloadError.Stage.DOWNLOAD,
-                        true, "Не удалось завершить загрузку", failure.getClass().getSimpleName()));
+                new DownloadError(category, DownloadError.Stage.DOWNLOAD,
+                        true, message, failure.getClass().getSimpleName()));
     }
 
     private static TaskSnapshot state(TaskSnapshot old, TaskSnapshot.State state, String message) {

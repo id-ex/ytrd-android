@@ -57,7 +57,6 @@ public class SettingsRepositoryTest {
         assertFalse(repo.isTranslateDefault());
         assertEquals("standard", repo.getDefaultVoice());
         assertEquals("mix", repo.getDefaultAudioMode());
-        assertEquals("dark", repo.getTheme());
         assertEquals("/default", repo.getDownloadFolder(new File("/default")));
     }
 

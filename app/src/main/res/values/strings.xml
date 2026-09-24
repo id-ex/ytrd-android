@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ytrd</string>
+    <string name="action_back">Назад</string>
     <string name="settings">Настройки</string>
     <string name="btn_download">Скачать</string>
     <string name="label_quality">Качество</string>
@@ -20,16 +21,21 @@
     <string name="translation_not_needed">Видео уже на русском</string>
 
     <!-- Settings -->
-    <string name="pref_cat_downloads">Загрузки</string>
+    <string name="pref_cat_downloads">Загрузка и сеть</string>
     <string name="pref_default_quality">Качество по умолчанию</string>
+    <string name="pref_default_folder">Папка для сохранения</string>
     <string name="pref_wifi_only">Только Wi-Fi</string>
-    <string name="pref_wifi_only_summary">Загружать видео только по Wi-Fi</string>
-    <string name="pref_cat_translation">Перевод</string>
+    <string name="pref_wifi_only_on">Загружать видео только при подключении к Wi-Fi</string>
+    <string name="pref_wifi_only_off">Разрешено скачивание через мобильную сеть</string>
+    <string name="pref_cat_translation">Перевод (Яндекс)</string>
     <string name="pref_translation_default">Включать перевод по умолчанию</string>
+    <string name="pref_translation_default_on">Автоматически предлагать дубляж для иностранных видео</string>
+    <string name="pref_translation_default_off">Дубляж включается вручную для каждого видео</string>
     <string name="pref_voice_default">Голос по умолчанию</string>
     <string name="pref_audio_mode_default">Режим звука по умолчанию</string>
-    <string name="pref_cat_appearance">Оформление</string>
-    <string name="pref_theme">Тема</string>
+    <string name="pref_cat_storage">Движок и хранилище</string>
+    <string name="pref_cookies_file">Файл cookies</string>
+    <string name="pref_ytdlp_version">Движок yt-dlp</string>
     <string name="pref_cat_about">О приложении</string>
     <string name="pref_version">Версия</string>
     <string name="pref_clear_cache">Очистить кэш</string>

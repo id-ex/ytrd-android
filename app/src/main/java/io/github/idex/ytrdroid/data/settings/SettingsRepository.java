@@ -17,7 +17,6 @@ public final class SettingsRepository {
     public static final String KEY_TRANSLATE_DEFAULT = "translate_default";
     public static final String KEY_VOICE_DEFAULT = "voice_default";
     public static final String KEY_AUDIO_MODE_DEFAULT = "audio_mode_default";
-    public static final String KEY_THEME = "theme";
     public static final String KEY_FOLDER = "last_download_folder";
 
     private final SharedPreferences prefs;
@@ -49,10 +48,6 @@ public final class SettingsRepository {
 
     public String getDefaultAudioMode() {
         return prefs.getString(KEY_AUDIO_MODE_DEFAULT, "mix");
-    }
-
-    public String getTheme() {
-        return prefs.getString(KEY_THEME, "dark");
     }
 
     public String getDownloadFolder(File fallbackDir) {

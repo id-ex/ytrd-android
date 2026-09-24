@@ -26,11 +26,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.github.idex.ytrdroid.R;
+import io.github.idex.ytrdroid.data.ytdlp.OEmbedClient;
+import io.github.idex.ytrdroid.data.ytdlp.VideoInfoCache;
 import io.github.idex.ytrdroid.engine.DownloadEngine;
 import io.github.idex.ytrdroid.engine.VotClient;
 import io.github.idex.ytrdroid.model.DownloadTask;
 import io.github.idex.ytrdroid.model.VideoInfo;
 import io.github.idex.ytrdroid.service.DownloadService;
+import io.github.idex.ytrdroid.util.ThumbnailLoader;
 import io.github.idex.ytrdroid.util.UrlUtil;
 
 public class ParamsFragment extends com.google.android.material.bottomsheet.BottomSheetDialogFragment {
@@ -169,6 +172,7 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
         int initialTranslateVis = defaultTranslate ? View.VISIBLE : View.GONE;
         groupVoice.setVisibility(initialTranslateVis);
         groupAudioMode.setVisibility(initialTranslateVis);
+        groupSubtitles.setVisibility(initialTranslateVis);
         spinnerVoice.setSelection("live".equals(app.container().settings.getDefaultVoice()) ? 1 : 0);
         radioAudioMode.check("dual".equals(app.container().settings.getDefaultAudioMode()) ? R.id.radio_dual : R.id.radio_mix);
 
@@ -177,6 +181,7 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
             int vis = checked ? View.VISIBLE : View.GONE;
             groupVoice.setVisibility(vis);
             groupAudioMode.setVisibility(vis);
+            groupSubtitles.setVisibility(vis);
         });
 
         // Video/Audio toggle
@@ -185,7 +190,7 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                 boolean isVideo = checkedId == R.id.btn_video;
                 spinnerQuality.setVisibility(isVideo ? View.VISIBLE : View.GONE);
                 view.findViewById(R.id.label_quality).setVisibility(isVideo ? View.VISIBLE : View.GONE);
-                groupSubtitles.setVisibility(isVideo ? View.VISIBLE : View.GONE);
+                groupSubtitles.setVisibility(isVideo && switchTranslate.isChecked() ? View.VISIBLE : View.GONE);
                 if (!isVideo) {
                     groupAudioMode.setVisibility(View.GONE);
                 } else if (switchTranslate.isChecked()) {
@@ -208,12 +213,44 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
             urlField.setError(getString(R.string.error_invalid_url));
             return;
         }
+
+        VideoInfo cached = VideoInfoCache.get(id);
+        if (cached != null) {
+            info = cached;
+            options.setVisibility(View.VISIBLE);
+            btnDownload.setEnabled(true);
+            btnDownload.setVisibility(View.VISIBLE);
+            bindInfo();
+            return;
+        }
+
         String url = "https://www.youtube.com/watch?v=" + id;
         final int generation = ++analysisGeneration;
         loading = true;
         btnDownload.setEnabled(false);
+        btnDownload.setVisibility(View.GONE);
+        options.setVisibility(View.GONE);
         txtTitle.setText(R.string.analyzing);
-        txtUploader.setText("");
+        txtUploader.setText("Получение информации о видео…");
+
+        // Этап 1 (Мгновенное превью oEmbed)
+        new Thread(() -> {
+            OEmbedClient.PreviewInfo preview = OEmbedClient.fetch(id);
+            if (preview != null && getActivity() != null) {
+                getActivity().runOnUiThread(() -> {
+                    if (getView() == null || generation != analysisGeneration || info != null) return;
+                    txtTitle.setText(preview.title);
+                    txtUploader.setText((preview.author != null ? preview.author + " · " : "") + "Определение доступных форматов…");
+                    ImageView imgThumb = getView().findViewById(R.id.img_thumb);
+                    if (imgThumb != null) {
+                        imgThumb.setVisibility(View.VISIBLE);
+                        ThumbnailLoader.getInstance().load(preview.thumbnailUrl, imgThumb);
+                    }
+                });
+            }
+        }, "oembed-preview").start();
+
+        // Этап 2 (Фоновый yt-dlp с оптимизированными флагами)
         Context ctx = requireContext().getApplicationContext();
         new Thread(() -> {
             try {
@@ -222,6 +259,7 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                 if (getActivity() != null) {
                     getActivity().runOnUiThread(() -> {
                         if (getView() == null || generation != analysisGeneration) return;
+                        VideoInfoCache.put(id, result);
                         info = result;
                         options.setVisibility(View.VISIBLE);
                         btnDownload.setEnabled(true);
@@ -232,15 +270,18 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
             } catch (Exception e) {
                 if (getActivity() != null) {
                     getActivity().runOnUiThread(() -> {
-                        if (getView() == null || generation != analysisGeneration) return;
-                        txtTitle.setText(R.string.error);
-                        txtUploader.setText(e.getMessage());
+                        if (getView() == null) return;
+                        if (generation == analysisGeneration && info == null) {
+                            txtTitle.setText(R.string.error);
+                            txtUploader.setText(e.getMessage());
+                            btnDownload.setEnabled(false);
+                            btnDownload.setVisibility(View.GONE);
+                            options.setVisibility(View.GONE);
+                        }
                     });
                 }
             }
         }, "fetch-info").start();
-
-
     }
 
     private void bindInfo() {
@@ -275,11 +316,25 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
         // Select default quality from settings if available
         io.github.idex.ytrdroid.App appInstance = (io.github.idex.ytrdroid.App) requireContext().getApplicationContext();
         String defaultQ = appInstance.container().settings.getDefaultQuality();
-        if (info.qualities != null && defaultQ != null) {
-            for (int i = 0; i < info.qualities.size(); i++) {
-                if (defaultQ.equals(info.qualities.get(i))) {
-                    spinnerQuality.setSelection(i);
-                    break;
+        if (defaultQ != null) {
+            if ("auto".equalsIgnoreCase(defaultQ)) {
+                int autoIndex = 0;
+                if (info.qualities != null) {
+                    for (int i = 0; i < info.qualities.size(); i++) {
+                        if ("auto".equalsIgnoreCase(info.qualities.get(i))) {
+                            autoIndex = i;
+                            break;
+                        }
+                    }
+                }
+                spinnerQuality.setSelection(autoIndex);
+            } else if (info.qualities != null) {
+                for (int i = 0; i < info.qualities.size(); i++) {
+                    String q = info.qualities.get(i);
+                    if (q != null && (q.equals(defaultQ) || q.startsWith(defaultQ))) {
+                        spinnerQuality.setSelection(i);
+                        break;
+                    }
                 }
             }
         }
@@ -289,22 +344,61 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
             ImageView imgThumb = getView() != null ? getView().findViewById(R.id.img_thumb) : null;
             if (imgThumb != null) {
                 imgThumb.setVisibility(View.VISIBLE);
-                io.github.idex.ytrdroid.util.ThumbnailLoader.getInstance().load(info.thumbnail, imgThumb);
+                ThumbnailLoader.getInstance().load(info.thumbnail, imgThumb);
             }
         }
 
         // Translation availability
+        txtLangStatus.setTextColor(getResources().getColor(R.color.text_secondary, null));
         if (VotClient.isRussian(info.language)) {
             switchTranslate.setChecked(false);
             switchTranslate.setEnabled(false);
             txtLangStatus.setText(R.string.translation_not_needed);
-            txtLangStatus.setTextColor(getResources().getColor(R.color.text_secondary, null));
             txtLangStatus.setVisibility(View.VISIBLE);
         } else {
+            boolean defTranslate = appInstance.container().settings.isTranslateDefault();
+            switchTranslate.setChecked(defTranslate);
             switchTranslate.setEnabled(true);
-            switchTranslate.setChecked(false);
-            txtLangStatus.setVisibility(View.GONE);
+            txtLangStatus.setText("Проверка наличия перевода…");
+            txtLangStatus.setVisibility(View.VISIBLE);
+
+            spinnerVoice.setSelection("live".equals(appInstance.container().settings.getDefaultVoice()) ? 1 : 0);
+            radioAudioMode.check("dual".equals(appInstance.container().settings.getDefaultAudioMode()) ? R.id.radio_dual : R.id.radio_mix);
+
+            final int currentGen = analysisGeneration;
+            new Thread(() -> {
+                VotClient vot = new VotClient();
+                String lang = VotClient.normalizeLang(info.language);
+                double dur = info.duration > 0 ? info.duration : 341.0;
+                boolean isLive = spinnerVoice != null && spinnerVoice.getSelectedItemPosition() == 1;
+                VotClient.TranslationResult tr = vot.checkStatus(info.url, dur, isLive, lang);
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        if (getView() == null || currentGen != analysisGeneration) return;
+                        txtLangStatus.setTextColor(getResources().getColor(R.color.text_secondary, null));
+                        if (tr != null && tr.success) {
+                            if ("Ready".equals(tr.status)) {
+                                txtLangStatus.setText("Перевод готов");
+                            } else if ("Waiting".equals(tr.status)) {
+                                txtLangStatus.setText("Перевод готовится (попробуйте позже)");
+                            } else {
+                                String msg = tr.message != null && !tr.message.isEmpty() ? tr.message : "недоступен";
+                                txtLangStatus.setText("Перевод: " + msg);
+                            }
+                        } else {
+                            String msg = tr != null && tr.message != null && !tr.message.isEmpty() ? tr.message : "недоступен";
+                            txtLangStatus.setText("Перевод недоступен (" + msg + ")");
+                        }
+                        txtLangStatus.setVisibility(View.VISIBLE);
+                    });
+                }
+            }, "vot-status-check").start();
         }
+
+        int translateVis = switchTranslate.isChecked() ? View.VISIBLE : View.GONE;
+        groupVoice.setVisibility(translateVis);
+        groupAudioMode.setVisibility(translateVis);
+        groupSubtitles.setVisibility(translateVis);
     }
 
     private void startDownload() {

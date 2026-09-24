@@ -51,14 +51,24 @@ public class DownloadEngine {
 
     /** Fetch video metadata via yt-dlp --dump-json. */
     public VideoInfo fetchInfo(Context context, String url) throws Exception {
-        return doFetchInfo(url);
+        return doFetchInfo(context, url);
     }
 
-    private VideoInfo doFetchInfo(String url) throws Exception {
+    private VideoInfo doFetchInfo(Context context, String url) throws Exception {
         YoutubeDLRequest req = new YoutubeDLRequest(url);
         req.addOption("--dump-json");
         req.addOption("--no-download");
         req.addOption("-f", "bv+ba/b");
+        req.addOption("--no-playlist");
+        req.addOption("--no-check-formats");
+        req.addOption("--compat-options", "no-live-chat");
+
+        if (context != null) {
+            File cookiesFile = new File(context.getFilesDir(), "cookies.txt");
+            if (cookiesFile.exists() && cookiesFile.length() > 0) {
+                req.addOption("--cookies", cookiesFile.getAbsolutePath());
+            }
+        }
 
         com.yausername.youtubedl_android.YoutubeDLResponse resp =
                 YoutubeDL.getInstance().execute(req, null, null);
@@ -165,6 +175,11 @@ public class DownloadEngine {
 
             YoutubeDLRequest req = new YoutubeDLRequest(task.url);
 
+            File cookiesFile = new File(context.getFilesDir(), "cookies.txt");
+            if (cookiesFile.isFile() && cookiesFile.length() > 0) {
+                req.addOption("--cookies", cookiesFile.getAbsolutePath());
+            }
+
             if (isAudio) {
                 req.addOption("-x");
                 req.addOption("--audio-format", "mp3");
@@ -183,6 +198,8 @@ public class DownloadEngine {
                 req.addOption("--write-auto-subs");
                 req.addOption("--sub-langs", "ru,en");
                 req.addOption("--embed-subs");
+                req.addOption("--compat-options", "no-live-chat");
+                req.addOption("--ignore-no-formats-error");
                 // --write-subs retains sidecar files for the subsequent translation merge.
             }
 

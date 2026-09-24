@@ -2,68 +2,106 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory android:title="@string/pref_cat_downloads">
+    <PreferenceCategory
+        android:key="cat_downloads"
+        android:title="@string/pref_cat_downloads">
 
         <ListPreference
             android:key="default_quality"
             android:title="@string/pref_default_quality"
+            android:icon="@drawable/ic_video_quality"
+            app:icon="@drawable/ic_video_quality"
             android:entries="@array/quality_labels"
             android:entryValues="@array/quality_values"
-            android:defaultValue="1080" />
+            android:defaultValue="1080"
+            app:useSimpleSummaryProvider="true" />
+
+        <Preference
+            android:key="default_folder"
+            android:title="@string/pref_default_folder"
+            android:icon="@drawable/ic_folder"
+            app:icon="@drawable/ic_folder" />
 
         <SwitchPreference
             android:key="wifi_only"
             android:title="@string/pref_wifi_only"
-            android:summary="@string/pref_wifi_only_summary"
-            android:defaultValue="false" />
+            android:icon="@drawable/ic_wifi"
+            app:icon="@drawable/ic_wifi"
+            android:defaultValue="false"
+            app:summaryOn="@string/pref_wifi_only_on"
+            app:summaryOff="@string/pref_wifi_only_off"
+            android:summaryOn="@string/pref_wifi_only_on"
+            android:summaryOff="@string/pref_wifi_only_off" />
     </PreferenceCategory>
 
-    <PreferenceCategory android:title="@string/pref_cat_translation">
+    <PreferenceCategory
+        android:key="cat_translation"
+        android:title="@string/pref_cat_translation">
 
         <SwitchPreference
             android:key="translate_default"
             android:title="@string/pref_translation_default"
-            android:defaultValue="false" />
+            android:icon="@drawable/ic_translate"
+            app:icon="@drawable/ic_translate"
+            android:defaultValue="false"
+            app:summaryOn="@string/pref_translation_default_on"
+            app:summaryOff="@string/pref_translation_default_off"
+            android:summaryOn="@string/pref_translation_default_on"
+            android:summaryOff="@string/pref_translation_default_off" />
 
         <ListPreference
             android:key="voice_default"
             android:title="@string/pref_voice_default"
+            android:icon="@drawable/ic_mic"
+            app:icon="@drawable/ic_mic"
             android:entries="@array/voice_labels"
             android:entryValues="@array/voice_values"
-            android:defaultValue="standard" />
+            android:defaultValue="standard"
+            app:useSimpleSummaryProvider="true" />
 
         <ListPreference
             android:key="audio_mode_default"
             android:title="@string/pref_audio_mode_default"
+            android:icon="@drawable/ic_audio"
+            app:icon="@drawable/ic_audio"
             android:entries="@array/audio_mode_labels"
             android:entryValues="@array/audio_mode_values"
-            android:defaultValue="mix" />
+            android:defaultValue="mix"
+            app:useSimpleSummaryProvider="true" />
     </PreferenceCategory>
 
-    <PreferenceCategory android:title="@string/pref_cat_appearance">
+    <PreferenceCategory
+        android:key="cat_storage"
+        android:title="@string/pref_cat_storage">
 
-        <ListPreference
-            android:key="theme"
-            android:title="@string/pref_theme"
-            android:entries="@array/theme_labels"
-            android:entryValues="@array/theme_values"
-            android:defaultValue="dark" />
+        <Preference
+            android:key="cookies_file"
+            android:title="@string/pref_cookies_file"
+            android:icon="@drawable/ic_cookie"
+            app:icon="@drawable/ic_cookie" />
+
+        <Preference
+            android:key="ytdlp_version"
+            android:title="@string/pref_ytdlp_version"
+            android:icon="@drawable/ic_update"
+            app:icon="@drawable/ic_update" />
+
+        <Preference
+            android:key="clear_cache"
+            android:title="@string/pref_clear_cache"
+            android:icon="@drawable/ic_delete"
+            app:icon="@drawable/ic_delete" />
     </PreferenceCategory>
 
-    <PreferenceCategory android:title="@string/pref_cat_about">
+    <PreferenceCategory
+        android:key="cat_about"
+        android:title="@string/pref_cat_about">
 
         <Preference
             android:key="version"
             android:title="@string/pref_version"
+            android:icon="@drawable/ic_info"
+            app:icon="@drawable/ic_info"
             android:selectable="false" />
-
-        <Preference
-            android:key="ytdlp_version"
-            android:title="Движок yt-dlp"
-            android:summary="Нажмите для обновления" />
-
-        <Preference
-            android:key="clear_cache"
-            android:title="@string/pref_clear_cache" />
     </PreferenceCategory>
 </PreferenceScreen>

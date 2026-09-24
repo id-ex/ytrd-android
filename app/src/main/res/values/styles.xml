@@ -10,6 +10,24 @@
         <item name="android:windowBackground">@color/bg_dark</item>
         <item name="android:statusBarColor">@color/bg_dark</item>
         <item name="android:navigationBarColor">@color/bg_dark</item>
+        <item name="preferenceTheme">@style/AppPreferenceTheme</item>
+        <item name="preferenceCategoryStyle">@style/PreferenceCategory</item>
+        <item name="preferenceCategoryTitleTextColor">@color/accent</item>
+        <item name="preferenceCategoryTitleTextAppearance">@style/PreferenceCategoryTitleTextAppearance</item>
+    </style>
+
+    <style name="AppPreferenceTheme" parent="PreferenceThemeOverlay">
+        <item name="preferenceCategoryStyle">@style/PreferenceCategory</item>
+        <item name="preferenceCategoryTitleTextColor">@color/accent</item>
+        <item name="preferenceCategoryTitleTextAppearance">@style/PreferenceCategoryTitleTextAppearance</item>
+    </style>
+
+    <style name="PreferenceCategory" parent="Preference.Category.Material">
+    </style>
+
+    <style name="PreferenceCategoryTitleTextAppearance" parent="TextAppearance.Material3.LabelLarge">
+        <item name="android:textColor">@color/accent</item>
+        <item name="android:textStyle">bold</item>
     </style>
 
     <style name="RoundedThumbnail">

@@ -58,7 +58,7 @@ public final class AppContainer {
         });
 
         downloads = new DownloadCoordinator(command -> main.post(command), workers,
-                new LegacyDownloadPipeline(context), snapshots -> {
+                new LegacyDownloadPipeline(context, settings, network), snapshots -> {
                     latest = snapshots;
                     // Persist snapshots to database
                     for (TaskSnapshot s : snapshots) {

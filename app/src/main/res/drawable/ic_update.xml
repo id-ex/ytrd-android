@@ -1,0 +1,10 @@
+<!-- Google Material Icons: update, Apache-2.0 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFE0E0E0"
+        android:pathData="M21,10.12h-6.78l2.74,-2.72c-1.39,-1.39 -3.3,-2.25 -5.43,-2.25 -4.01,0 -7.28,3.03 -7.5,6.97h-2C2.26,6.33 6.64,2 12,2c2.97,0 5.64,1.21 7.57,3.14L22.25,2.46V10.12zM12.5,8v4.25l3.5,2.08 -0.72,1.21L11,13V8h1.5zM3.01,13.88h6.78l-2.74,2.72c1.39,1.39 3.3,2.25 5.43,2.25 4.01,0 7.28,-3.03 7.5,-6.97h2c-0.23,5.79 -4.61,10.12 -9.97,10.12 -2.97,0 -5.64,-1.21 -7.57,-3.14L1.75,21.54V13.88z" />
+</vector>
