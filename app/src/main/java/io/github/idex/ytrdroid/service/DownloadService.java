@@ -84,10 +84,17 @@ public class DownloadService extends Service {
     }
 
     /** All UI/service calls are on the main thread; worker events are posted there. */
-    public void enqueue(DownloadTask legacy) {
+    public static void enqueue(android.content.Context context, DownloadTask legacy) {
+        android.content.Context appCtx = context.getApplicationContext();
+        AppContainer container = ((App) appCtx).container();
         DownloadRequest request = LegacyTaskMapper.freeze(legacy);
-        startExecutionPath();
-        coordinator.enqueue(request);
+        ContextCompat.startForegroundService(appCtx, new Intent(appCtx, DownloadService.class));
+        container.downloads.setExecutionEnabled(true);
+        container.downloads.enqueue(request);
+    }
+
+    public void enqueue(DownloadTask legacy) {
+        enqueue(this, legacy);
     }
 
     public void retryTask(DownloadTask task) {

@@ -1,6 +1,7 @@
 package io.github.idex.ytrdroid.ui;
 
 import android.content.Context;
+import android.content.DialogInterface;
 import android.os.Bundle;
 import java.io.File;
 import android.view.LayoutInflater;
@@ -438,17 +439,24 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                 .container().settings.setDownloadFolder(currentFolder);
 
         // Enqueue to service
-        MainActivity activity = (MainActivity) getActivity();
-        if (activity != null && activity.getDownloadService() != null) {
-            try {
-                activity.getDownloadService().enqueue(task);
-            } catch (io.github.idex.ytrdroid.domain.model.DownloadRequest.ValidationError e) {
-                Toast.makeText(requireContext(), e.getMessage(), Toast.LENGTH_LONG).show();
-                return;
-            }
-            Toast.makeText(requireContext(), R.string.downloading, Toast.LENGTH_SHORT).show();
-            dismiss();
-            activity.openDownloads();
+        try {
+            DownloadService.enqueue(requireContext(), task);
+        } catch (io.github.idex.ytrdroid.domain.model.DownloadRequest.ValidationError e) {
+            Toast.makeText(requireContext(), e.getMessage(), Toast.LENGTH_LONG).show();
+            return;
+        }
+        Toast.makeText(requireContext(), R.string.downloading, Toast.LENGTH_SHORT).show();
+        dismiss();
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).openDownloads();
+        }
+    }
+
+    @Override
+    public void onDismiss(@NonNull DialogInterface dialog) {
+        super.onDismiss(dialog);
+        if (getActivity() instanceof ShareActivity) {
+            getActivity().finish();
         }
     }
 
