@@ -29,6 +29,7 @@ import java.util.List;
 import io.github.idex.ytrdroid.R;
 import io.github.idex.ytrdroid.data.ytdlp.OEmbedClient;
 import io.github.idex.ytrdroid.data.ytdlp.VideoInfoCache;
+import io.github.idex.ytrdroid.domain.quality.QualitySelector;
 import io.github.idex.ytrdroid.engine.DownloadEngine;
 import io.github.idex.ytrdroid.engine.VotClient;
 import io.github.idex.ytrdroid.model.DownloadTask;
@@ -39,6 +40,8 @@ import io.github.idex.ytrdroid.util.UrlUtil;
 
 public class ParamsFragment extends com.google.android.material.bottomsheet.BottomSheetDialogFragment {
     private int analysisGeneration;
+    private volatile DownloadEngine analysisEngine;
+    private volatile String analysisProcessId;
     private android.widget.EditText urlField;
     private View options;
     private static final String ARG_URL = "url";
@@ -132,11 +135,13 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
             public void onTextChanged(CharSequence s, int start, int before, int count) {
                 btnClearUrl.setVisibility(s != null && s.length() > 0 ? View.VISIBLE : View.GONE);
                 analysisGeneration++;
+                cancelAnalysis();
                 info = null;
                 loading = true;
                 options.setVisibility(View.GONE);
-                btnDownload.setEnabled(false);
-                btnDownload.setVisibility(View.GONE);
+                boolean validUrl = UrlUtil.extractVideoId(s == null ? "" : s.toString()) != null;
+                btnDownload.setEnabled(validUrl);
+                btnDownload.setVisibility(validUrl ? View.VISIBLE : View.GONE);
                 view.findViewById(R.id.img_thumb).setVisibility(View.GONE);
                 txtTitle.setText("Вставьте ссылку на видео");
                 txtUploader.setText("Параметры появятся после анализа ссылки");
@@ -209,6 +214,7 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
     }
 
     private void analyze() {
+        cancelAnalysis();
         String id = UrlUtil.extractVideoId(urlField.getText().toString());
         if (id == null) {
             urlField.setError(getString(R.string.error_invalid_url));
@@ -228,8 +234,8 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
         String url = "https://www.youtube.com/watch?v=" + id;
         final int generation = ++analysisGeneration;
         loading = true;
-        btnDownload.setEnabled(false);
-        btnDownload.setVisibility(View.GONE);
+        btnDownload.setEnabled(true);
+        btnDownload.setVisibility(View.VISIBLE);
         options.setVisibility(View.GONE);
         txtTitle.setText(R.string.analyzing);
         txtUploader.setText("Получение информации о видео…");
@@ -241,7 +247,9 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                 getActivity().runOnUiThread(() -> {
                     if (getView() == null || generation != analysisGeneration || info != null) return;
                     txtTitle.setText(preview.title);
-                    txtUploader.setText((preview.author != null ? preview.author + " · " : "") + "Определение доступных форматов…");
+                    txtUploader.setText(preview.author != null
+                            ? getString(R.string.analysis_formats_author, preview.author)
+                            : getString(R.string.analysis_formats));
                     ImageView imgThumb = getView().findViewById(R.id.img_thumb);
                     if (imgThumb != null) {
                         imgThumb.setVisibility(View.VISIBLE);
@@ -253,10 +261,13 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
 
         // Этап 2 (Фоновый yt-dlp с оптимизированными флагами)
         Context ctx = requireContext().getApplicationContext();
+        DownloadEngine engine = new DownloadEngine();
+        String processId = java.util.UUID.randomUUID().toString();
+        analysisEngine = engine;
+        analysisProcessId = processId;
         new Thread(() -> {
             try {
-                DownloadEngine engine = new DownloadEngine();
-                VideoInfo result = engine.fetchInfo(ctx, url);
+                VideoInfo result = engine.fetchInfo(ctx, url, processId);
                 if (getActivity() != null) {
                     getActivity().runOnUiThread(() -> {
                         if (getView() == null || generation != analysisGeneration) return;
@@ -275,14 +286,28 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                         if (generation == analysisGeneration && info == null) {
                             txtTitle.setText(R.string.error);
                             txtUploader.setText(e.getMessage());
-                            btnDownload.setEnabled(false);
-                            btnDownload.setVisibility(View.GONE);
+                            boolean validUrl = UrlUtil.extractVideoId(urlField.getText().toString()) != null;
+                            btnDownload.setEnabled(validUrl);
+                            btnDownload.setVisibility(validUrl ? View.VISIBLE : View.GONE);
                             options.setVisibility(View.GONE);
                         }
                     });
                 }
+            } finally {
+                if (engine == analysisEngine && processId.equals(analysisProcessId)) {
+                    analysisEngine = null;
+                    analysisProcessId = null;
+                }
             }
         }, "fetch-info").start();
+    }
+
+    private void cancelAnalysis() {
+        DownloadEngine engine = analysisEngine;
+        if (engine == null) return;
+        analysisEngine = null;
+        analysisProcessId = null;
+        engine.cancel(null);
     }
 
     private void bindInfo() {
@@ -317,25 +342,12 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
         // Select default quality from settings if available
         io.github.idex.ytrdroid.App appInstance = (io.github.idex.ytrdroid.App) requireContext().getApplicationContext();
         String defaultQ = appInstance.container().settings.getDefaultQuality();
-        if (defaultQ != null) {
-            if ("auto".equalsIgnoreCase(defaultQ)) {
-                int autoIndex = 0;
-                if (info.qualities != null) {
-                    for (int i = 0; i < info.qualities.size(); i++) {
-                        if ("auto".equalsIgnoreCase(info.qualities.get(i))) {
-                            autoIndex = i;
-                            break;
-                        }
-                    }
-                }
-                spinnerQuality.setSelection(autoIndex);
-            } else if (info.qualities != null) {
-                for (int i = 0; i < info.qualities.size(); i++) {
-                    String q = info.qualities.get(i);
-                    if (q != null && (q.equals(defaultQ) || q.startsWith(defaultQ))) {
-                        spinnerQuality.setSelection(i);
-                        break;
-                    }
+        String selectedQuality = QualitySelector.select(defaultQ, info.qualities);
+        if (info.qualities != null) {
+            for (int i = 0; i < info.qualities.size(); i++) {
+                if (selectedQuality.equalsIgnoreCase(info.qualities.get(i))) {
+                    spinnerQuality.setSelection(i);
+                    break;
                 }
             }
         }
@@ -384,11 +396,11 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                                 txtLangStatus.setText("Перевод готовится (попробуйте позже)");
                             } else {
                                 String msg = tr.message != null && !tr.message.isEmpty() ? tr.message : "недоступен";
-                                txtLangStatus.setText("Перевод: " + msg);
+                                txtLangStatus.setText(getString(R.string.translation_status_message, msg));
                             }
                         } else {
                             String msg = tr != null && tr.message != null && !tr.message.isEmpty() ? tr.message : "недоступен";
-                            txtLangStatus.setText("Перевод недоступен (" + msg + ")");
+                            txtLangStatus.setText(getString(R.string.translation_unavailable_message, msg));
                         }
                         txtLangStatus.setVisibility(View.VISIBLE);
                     });
@@ -403,45 +415,64 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
     }
 
     private void startDownload() {
-        if (loading || info == null) {
-            Toast.makeText(requireContext(), R.string.analyzing, Toast.LENGTH_SHORT).show();
+        cancelAnalysis();
+        String videoId = UrlUtil.extractVideoId(urlField.getText().toString());
+        if (videoId == null) {
+            btnDownload.setEnabled(false);
+            btnDownload.setVisibility(View.GONE);
+            urlField.setError(getString(R.string.error_invalid_url));
             return;
         }
-
+        btnDownload.setEnabled(false);
+        io.github.idex.ytrdroid.data.settings.SettingsRepository settings =
+                ((io.github.idex.ytrdroid.App) requireContext().getApplicationContext()).container().settings;
         DownloadTask task = new DownloadTask();
-        task.url = info.url;
-        task.title = info.title;
-        task.thumbnail = info.thumbnail;
-
-        boolean isVideo = toggleType.getCheckedButtonId() == R.id.btn_video;
-        if (isVideo) {
-            int pos = spinnerQuality.getSelectedItemPosition();
-            task.quality = (info.qualities != null && pos < info.qualities.size())
-                    ? info.qualities.get(pos) : "auto";
-            task.ext = "mp4";
+        if (info == null) {
+            task.url = "https://www.youtube.com/watch?v=" + videoId;
+            task.title = null;
+            task.duration = 0;
+            task.quality = settings.getDefaultQuality();
+            if (task.quality == null || task.quality.isEmpty()) task.quality = "auto";
+            task.translate = settings.isTranslateDefault();
+            task.liveVoice = "live".equals(settings.getDefaultVoice());
+            task.audioMode = "dual".equals(settings.getDefaultAudioMode()) ? "dual" : "mix";
+            task.subtitles = false;
+            task.language = null;
+            int desiredHeight = 0;
+            try { desiredHeight = Integer.parseInt(task.quality); } catch (NumberFormatException ignored) {}
+            task.ext = desiredHeight > 1080 ? "mkv" : "mp4";
         } else {
-            task.quality = "audio";
-            task.ext = "mp3";
+            task.url = info.url;
+            task.title = info.title;
+            task.thumbnail = info.thumbnail;
+
+            boolean isVideo = toggleType.getCheckedButtonId() == R.id.btn_video;
+            if (isVideo) {
+                int pos = spinnerQuality.getSelectedItemPosition();
+                task.quality = (info.qualities != null && pos < info.qualities.size())
+                        ? info.qualities.get(pos) : "auto";
+                task.ext = "mp4";
+                try {
+                    if (Integer.parseInt(task.quality) > 1080) task.ext = "mkv";
+                } catch (NumberFormatException ignored) { /* auto */ }
+            } else {
+                task.quality = "audio";
+                task.ext = "mp3";
+            }
+            task.translate = switchTranslate.isChecked();
+            task.liveVoice = spinnerVoice.getSelectedItemPosition() == 1;
+            task.audioMode = radioAudioMode.getCheckedRadioButtonId() == R.id.radio_dual
+                    ? "dual" : "mix";
+            task.subtitles = isVideo && switchSubtitles.isChecked();
+            task.duration = info.duration > 0 ? info.duration : 341.0;
+            task.language = info.language != null ? info.language : "en";
         }
-
-        task.translate = switchTranslate.isChecked();
-        task.liveVoice = spinnerVoice.getSelectedItemPosition() == 1;
-        task.audioMode = radioAudioMode.getCheckedRadioButtonId() == R.id.radio_dual
-                ? "dual" : "mix";
-        task.subtitles = isVideo && switchSubtitles.isChecked();
-        task.duration = info.duration > 0 ? info.duration : 341.0;
-        task.language = info.language != null ? info.language : "en";
-
         task.destinationPath = currentFolder;
 
-        // Save last used folder
-        ((io.github.idex.ytrdroid.App) requireContext().getApplicationContext())
-                .container().settings.setDownloadFolder(currentFolder);
-
-        // Enqueue to service
         try {
             DownloadService.enqueue(requireContext(), task);
         } catch (io.github.idex.ytrdroid.domain.model.DownloadRequest.ValidationError e) {
+            btnDownload.setEnabled(true);
             Toast.makeText(requireContext(), e.getMessage(), Toast.LENGTH_LONG).show();
             return;
         }
@@ -455,6 +486,7 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
     @Override
     public void onDismiss(@NonNull DialogInterface dialog) {
         super.onDismiss(dialog);
+        cancelAnalysis();
         if (getActivity() instanceof ShareActivity) {
             getActivity().finish();
         }

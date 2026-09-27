@@ -156,7 +156,8 @@ public final class DownloadCoordinator {
                 Execution execution = new Execution(task.request.id);
                 active = execution;
                 TaskSnapshot starting = new TaskSnapshot(task.request, execution.id,
-                        task.request.translate ? TRANSLATING : DOWNLOADING,
+                        task.request.title == null && task.request.duration <= 0 ? ANALYZING
+                                : (task.request.translate ? TRANSLATING : DOWNLOADING),
                         -1, 0, 0, 0, "Подготовка…", null, null);
                 tasks.put(task.request.id, starting);
                 try {
@@ -196,7 +197,8 @@ public final class DownloadCoordinator {
                 || !execution.taskId.equals(event.request.id)) return;
         TaskSnapshot old = tasks.get(execution.taskId);
         if (old.state == PAUSING || old.state == CANCELLING) return;
-        if (event.state != TRANSLATING && event.state != DOWNLOADING && event.state != PROCESSING) return;
+        if (event.state != ANALYZING && event.state != TRANSLATING
+                && event.state != DOWNLOADING && event.state != PROCESSING) return;
         tasks.put(execution.taskId, event);
         publish();
     }
@@ -208,6 +210,12 @@ public final class DownloadCoordinator {
         else if (old.state == CANCELLING) tasks.put(execution.taskId, state(old, CANCELLED, "Отменено"));
         else if (!execution.id.equals(result.executionId) || !execution.taskId.equals(result.request.id)) {
             tasks.put(execution.taskId, failed(old, new IllegalStateException("Wrong execution result")));
+        } else if (result.state == ERROR && old.request != result.request) {
+            // Analysis may have enriched the request before a later stage failed.
+            // Keep those resolved settings for retry, while preserving the reported error.
+            tasks.put(execution.taskId, new TaskSnapshot(old.request, result.executionId,
+                    result.state, result.progress, result.downloadedBytes, result.totalBytes,
+                    result.speed, result.stageText, result.resultReference, result.error));
         } else tasks.put(execution.taskId, result);
         active = null;
         advance();

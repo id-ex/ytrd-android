@@ -23,6 +23,6 @@ public interface TaskDao {
     void delete(String id);
 
     @Query("UPDATE tasks SET state = 'INTERRUPTED', stageText = 'Прервано остановкой приложения' " +
-           "WHERE state IN ('TRANSLATING', 'DOWNLOADING', 'PROCESSING', 'PAUSING', 'CANCELLING')")
+           "WHERE state IN ('ANALYZING', 'TRANSLATING', 'DOWNLOADING', 'PROCESSING', 'PAUSING', 'CANCELLING')")
     int markActiveAsInterrupted();
 }

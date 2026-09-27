@@ -51,10 +51,23 @@ public class DownloadEngine {
 
     /** Fetch video metadata via yt-dlp --dump-json. */
     public VideoInfo fetchInfo(Context context, String url) throws Exception {
-        return doFetchInfo(context, url);
+        return fetchInfo(context, url, null);
     }
 
-    private VideoInfo doFetchInfo(Context context, String url) throws Exception {
+    /** Fetch video metadata using a process id that can be cancelled through cancel(). */
+    public VideoInfo fetchInfo(Context context, String url, String processId) throws Exception {
+        currentProcessId = processId;
+        try {
+            checkCancelled();
+            VideoInfo info = doFetchInfo(context, url, processId);
+            checkCancelled();
+            return info;
+        } finally {
+            currentProcessId = null;
+        }
+    }
+
+    private VideoInfo doFetchInfo(Context context, String url, String processId) throws Exception {
         YoutubeDLRequest req = new YoutubeDLRequest(url);
         req.addOption("--dump-json");
         req.addOption("--no-download");
@@ -70,8 +83,10 @@ public class DownloadEngine {
             }
         }
 
+        checkCancelled();
         com.yausername.youtubedl_android.YoutubeDLResponse resp =
-                YoutubeDL.getInstance().execute(req, null, null);
+                YoutubeDL.getInstance().execute(req, processId, null);
+        checkCancelled();
 
         return io.github.idex.ytrdroid.data.ytdlp.YtDlpMetadataParser.parse(resp.getOut(), url);
     }
@@ -190,7 +205,7 @@ public class DownloadEngine {
                 } else {
                     req.addOption("-f", "bv+ba/b");
                 }
-                req.addOption("--merge-output-format", "mp4");
+                req.addOption("--merge-output-format", "mkv".equals(task.ext) ? "mkv" : "mp4");
             }
 
             if (task.subtitles) {
@@ -232,7 +247,9 @@ public class DownloadEngine {
                 task.stageText = "Скачивание видео…";
                 if (listener != null) listener.onStateChanged(task);
 
-                File tempVideo = workspace.getCompleteVideoFile();
+                File tempVideo = "mkv".equals(task.ext)
+                        ? new File(workspace.ensureTaskDir(), "temp_video.mkv")
+                        : workspace.getCompleteVideoFile();
                 req.addOption("-o", tempVideo.getAbsolutePath());
 
                 currentProcessId = processId;
@@ -320,6 +337,7 @@ public class DownloadEngine {
                 // Audio extraction produces an mp3, not the original mp4 template.
                 task.stageText = isAudio ? "Скачивание аудио…" : "Скачивание видео…";
                 File tempVideo = isAudio ? new File(workspace.ensureTaskDir(), "original.mp3")
+                        : "mkv".equals(task.ext) ? new File(workspace.ensureTaskDir(), "temp_video.mkv")
                         : workspace.getCompleteVideoFile();
                 req.addOption("-o", tempVideo.getAbsolutePath());
 

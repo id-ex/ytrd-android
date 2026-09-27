@@ -45,4 +45,8 @@
     <string name="status_paused_count">На паузе · %1$d</string>
     <string name="status_queued_count">В очереди · %1$d</string>
     <string name="error">Ошибка</string>
+    <string name="analysis_formats_author">%1$s · Определение доступных форматов…</string>
+    <string name="analysis_formats">Определение доступных форматов…</string>
+    <string name="translation_status_message">Перевод: %1$s</string>
+    <string name="translation_unavailable_message">Перевод недоступен (%1$s)</string>
 </resources>

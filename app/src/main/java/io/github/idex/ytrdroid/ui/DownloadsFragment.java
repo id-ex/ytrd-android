@@ -125,7 +125,8 @@ public class DownloadsFragment extends Fragment {
         List<DownloadTask> errors = new ArrayList<>();
 
         for (DownloadTask t : all) {
-            if (active == null && (t.state == DownloadTask.State.DOWNLOADING
+            if (active == null && (t.state == DownloadTask.State.ANALYZING
+                    || t.state == DownloadTask.State.DOWNLOADING
                     || t.state == DownloadTask.State.TRANSLATING
                     || t.state == DownloadTask.State.PROCESSING
                     || t.state == DownloadTask.State.PAUSING
@@ -199,7 +200,8 @@ public class DownloadsFragment extends Fragment {
                 || task.state == DownloadTask.State.CANCELLING;
 
         // Size and speed
-        if (isPaused || task.state == DownloadTask.State.PROCESSING || task.state == DownloadTask.State.TRANSLATING) {
+        if (isPaused || task.state == DownloadTask.State.ANALYZING
+                || task.state == DownloadTask.State.PROCESSING || task.state == DownloadTask.State.TRANSLATING) {
             activeSize.setText("");
             activeSpeed.setText("");
         } else {
@@ -214,8 +216,8 @@ public class DownloadsFragment extends Fragment {
         } else {
             activeProgressBar.setVisibility(View.VISIBLE);
             activePercent.setVisibility(View.VISIBLE);
-            if (task.progress < 0) {
-                activePercent.setText("0%");
+            if (task.state == DownloadTask.State.ANALYZING || task.progress < 0) {
+                activePercent.setText("");
                 activeProgressBar.setIndeterminate(true);
             } else {
                 activePercent.setText(task.formatProgress());
@@ -227,6 +229,8 @@ public class DownloadsFragment extends Fragment {
         // Stage text under progress bar
         if (isPaused) {
             activeStageText.setText("На паузе");
+        } else if (task.state == DownloadTask.State.ANALYZING) {
+            activeStageText.setText("Анализ видео");
         } else if (task.stageText != null && !task.stageText.isEmpty()) {
             activeStageText.setText(task.stageText);
         } else {

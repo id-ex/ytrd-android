@@ -5,7 +5,7 @@ import java.util.UUID;
 /** A detached, immutable observation. It cannot be used to mutate a running task. */
 public final class TaskSnapshot {
     public enum State {
-        QUEUED, PAUSING, PAUSED, TRANSLATING, DOWNLOADING, PROCESSING,
+        QUEUED, PAUSING, PAUSED, ANALYZING, TRANSLATING, DOWNLOADING, PROCESSING,
         CANCELLING, DONE, ERROR, CANCELLED, INTERRUPTED
     }
     public final DownloadRequest request;

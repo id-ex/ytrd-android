@@ -1,7 +1,7 @@
 package io.github.idex.ytrdroid.model;
 
 public class DownloadTask {
-    public enum State { QUEUED, PAUSING, PAUSED, TRANSLATING, DOWNLOADING, PROCESSING, CANCELLING, DONE, ERROR, CANCELLED, INTERRUPTED }
+    public enum State { QUEUED, PAUSING, PAUSED, ANALYZING, TRANSLATING, DOWNLOADING, PROCESSING, CANCELLING, DONE, ERROR, CANCELLED, INTERRUPTED }
 
     private io.github.idex.ytrdroid.domain.model.DownloadRequest request;
     public java.util.UUID executionId;

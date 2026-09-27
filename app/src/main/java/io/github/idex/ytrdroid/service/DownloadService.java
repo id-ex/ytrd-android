@@ -216,7 +216,7 @@ public class DownloadService extends Service {
     private TaskSnapshot active() {
         for (TaskSnapshot task : snapshots) {
             switch (task.state) {
-                case TRANSLATING: case DOWNLOADING: case PROCESSING: case PAUSING: case CANCELLING: case PAUSED:
+                case ANALYZING: case TRANSLATING: case DOWNLOADING: case PROCESSING: case PAUSING: case CANCELLING: case PAUSED:
                     return task;
                 default: break;
             }
