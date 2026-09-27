@@ -43,6 +43,8 @@ public class DownloadService extends Service {
     private DownloadCoordinator coordinator;
     private final Consumer<List<TaskSnapshot>> observer = this::onSnapshots;
     private boolean executionPathStarted;
+    private boolean awaitingQueuePublication;
+    private long startGeneration;
     private UUID stoppingExecution;
     private boolean listenerPending;
     private List<TaskSnapshot> snapshots = Collections.emptyList();
@@ -61,6 +63,8 @@ public class DownloadService extends Service {
     @Override public void onCreate() {
         super.onCreate();
         main = new Handler(getMainLooper());
+        // A bindService must not create a foreground notification. A foreground-start
+        // command promotes synchronously in onStartCommand before observer registration can delay it.
         container = ((App) getApplication()).container();
         coordinator = container.downloads;
         container.observe(observer);
@@ -71,7 +75,14 @@ public class DownloadService extends Service {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         // Satisfy the foreground-start contract before handling any command.
         executionPathStarted = true;
+        awaitingQueuePublication = true;
+        final long generation = ++startGeneration;
         enterForeground();
+        coordinator.afterPendingCommands(() -> main.post(() -> {
+            if (destroyed || generation != startGeneration) return;
+            awaitingQueuePublication = false;
+            if (active() == null && !hasQueued()) leaveForeground(startId, generation);
+        }));
         TaskSnapshot active = active();
         if (intent != null && active != null
                 && active.request.id.toString().equals(intent.getStringExtra(EXTRA_TASK))) {
@@ -79,7 +90,6 @@ public class DownloadService extends Service {
             else if (ACTION_PAUSE.equals(intent.getAction())) coordinator.pause(active.request.id);
             else if (ACTION_RESUME.equals(intent.getAction())) coordinator.resume(active.request.id);
         }
-        if (active == null && !hasQueued()) leaveForeground(startId);
         return START_NOT_STICKY;
     }
 
@@ -158,7 +168,8 @@ public class DownloadService extends Service {
         foreground = true;
     }
 
-    private void leaveForeground(int startId) {
+    private void leaveForeground(int startId, long generation) {
+        if (generation != startGeneration || active() != null || hasQueued()) return;
         if (foreground) stopForeground(STOP_FOREGROUND_REMOVE);
         foreground = false;
         if (startId == 0) stopSelf(); else stopSelf(startId);
@@ -168,8 +179,7 @@ public class DownloadService extends Service {
         if (destroyed) return;
         snapshots = updated;
         TaskSnapshot active = active();
-        if (active == null && !hasQueued()) leaveForeground(0);
-        else if (executionPathStarted) {
+        if (executionPathStarted) {
             long now = android.os.SystemClock.elapsedRealtime();
             if (active != null && (!foreground || active.state != lastNotificationState
                     || !active.executionId.equals(lastExecution) || now - lastNotificationTime >= 400)) {

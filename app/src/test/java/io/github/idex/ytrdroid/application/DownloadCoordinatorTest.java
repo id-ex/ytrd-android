@@ -61,6 +61,17 @@ public class DownloadCoordinatorTest {
     }
     void finish() { workers.next(); serial.drain(); }
 
+    @Test public void barrierRunsFifoAfterEarlierCommandHasPublishedSnapshots() {
+        DownloadRequest a = request();
+        List<String> order = new ArrayList<>();
+        coordinator.enqueue(a);
+        coordinator.afterPendingCommands(() -> order.add("barrier:" + task(a).state));
+        assertTrue(order.isEmpty());
+        serial.drain();
+        assertEquals(java.util.Arrays.asList("barrier:DOWNLOADING"), order);
+        assertEquals(DOWNLOADING, task(a).state);
+    }
+
     @Test public void pauseWaitsForTerminationAndDoesNotRestartOnlyTask() {
         DownloadRequest a = request();
         enqueue(a);

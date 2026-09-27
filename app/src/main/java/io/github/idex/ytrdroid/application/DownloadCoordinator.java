@@ -76,6 +76,12 @@ public final class DownloadCoordinator {
         this.listener = listener;
     }
 
+    /** Runs after all commands submitted earlier to the FIFO serial executor have published. */
+    public void afterPendingCommands(Runnable callback) {
+        if (callback == null) throw new IllegalArgumentException("callback must not be null");
+        serial.execute(callback);
+    }
+
     public void enqueue(DownloadRequest request) {
         serial.execute(() -> {
             if (closed || tasks.containsKey(request.id)) return;
