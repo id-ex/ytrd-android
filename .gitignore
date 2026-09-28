@@ -20,3 +20,8 @@ keystore.properties
 *.log
 .idea/
 *.iml
+
+# Local development notes (keep files on disk, not in the repository)
+/REFACTORING_PLAN.md
+/REVIEW_ANDROID.md
+/SETTINGS_REDESIGN_PLAN.md
