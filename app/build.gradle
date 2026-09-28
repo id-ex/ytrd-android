@@ -24,6 +24,21 @@ if (!votHmacKey) {
     logger.warn('VOT_HMAC_KEY is not configured; voice-over translation will be unavailable')
 }
 
+def releaseSigningPropertiesFile = rootProject.file('key.properties')
+def releaseSigningProperties = new Properties()
+if (releaseSigningPropertiesFile.exists()) {
+    releaseSigningPropertiesFile.withInputStream { releaseSigningProperties.load(it) }
+    def releaseStorePath = releaseSigningProperties.getProperty('storeFile', '')
+    if (!releaseStorePath || !new File(releaseStorePath).isAbsolute()) {
+        throw new GradleException('key.properties must define storeFile as an absolute path')
+    }
+    ['storePassword', 'keyAlias', 'keyPassword'].each { propertyName ->
+        if (!releaseSigningProperties.getProperty(propertyName, '')) {
+            throw new GradleException("key.properties must define ${propertyName}")
+        }
+    }
+}
+
 android {
     buildFeatures {
         buildConfig true
@@ -39,15 +54,40 @@ android {
         versionCode appVersionCode.toInteger()
         versionName appVersionName
         buildConfigField 'String', 'VOT_HMAC_KEY', groovy.json.JsonOutput.toJson(votHmacKey)
+    }
 
-        ndk {
-            abiFilters 'arm64-v8a'
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'arm64-v8a', 'armeabi-v7a'
+            universalApk true
+        }
+    }
+
+    packaging {
+        jniLibs {
+            excludes += ['**/x86/**', '**/x86_64/**']
+        }
+    }
+
+    signingConfigs {
+        if (releaseSigningPropertiesFile.exists()) {
+            release {
+                storeFile new File(releaseSigningProperties.getProperty('storeFile'))
+                storePassword releaseSigningProperties.getProperty('storePassword')
+                keyAlias releaseSigningProperties.getProperty('keyAlias')
+                keyPassword releaseSigningProperties.getProperty('keyPassword')
+            }
         }
     }
 
     buildTypes {
         release {
             minifyEnabled false
+            if (releaseSigningPropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 

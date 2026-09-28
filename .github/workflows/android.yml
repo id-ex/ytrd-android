@@ -14,8 +14,42 @@ jobs:
       - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
       - run: sdkmanager 'platforms;android-35' 'build-tools;34.0.0'
-      - run: ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --console=plain
+      - run: ./gradlew :app:testDebugUnitTest :app:lintDebug --console=plain
       - run: python3 tools/check_lint.py
+      - run: ./gradlew :app:assembleDebug :app:assembleRelease --console=plain
+      - name: Verify ARM APK variants
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          expected = {
+              "arm64-v8a": {"arm64-v8a"},
+              "armeabi-v7a": {"armeabi-v7a"},
+              "universal": {"arm64-v8a", "armeabi-v7a"},
+          }
+          for build_type in ("debug", "release"):
+              apk_dir = Path("app/build/outputs/apk") / build_type
+              apks = list(apk_dir.glob("*.apk"))
+              for variant, expected_abis in expected.items():
+                  matches = [apk for apk in apks if variant in apk.name]
+                  if len(matches) != 1:
+                      raise SystemExit(
+                          f"Expected exactly one {build_type} {variant} APK in {apk_dir}; found {matches}"
+                      )
+                  apk = matches[0]
+                  with ZipFile(apk) as archive:
+                      abis = {
+                          name.split("/")[1]
+                          for name in archive.namelist()
+                          if name.startswith("lib/") and len(name.split("/")) > 2
+                      }
+                  if abis != expected_abis:
+                      raise SystemExit(
+                          f"{apk}: expected ABIs {sorted(expected_abis)}, got {sorted(abis)}"
+                      )
+                  print(f"Verified {apk}: {sorted(abis)}")
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
