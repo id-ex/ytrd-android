@@ -1,6 +1,7 @@
 package io.github.idex.ytrdroid.service;
 
 import android.app.Notification;
+import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
@@ -8,20 +9,22 @@ import android.net.Uri;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
-
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 
 import io.github.idex.ytrdroid.App;
 import io.github.idex.ytrdroid.R;
 import io.github.idex.ytrdroid.application.DownloadCoordinator;
-import io.github.idex.ytrdroid.domain.model.DownloadRequest;
 import io.github.idex.ytrdroid.domain.model.TaskSnapshot;
 import io.github.idex.ytrdroid.di.AppContainer;
 import io.github.idex.ytrdroid.model.DownloadTask;
@@ -38,6 +41,8 @@ public class DownloadService extends Service {
     private static final int NOTIFICATION_ID = 1;
 
     private final IBinder binder = new LocalBinder();
+    // Process-wide: service recreation must not re-post old completed tasks.
+    private static final Set<String> deliveredTerminalExecutions = new HashSet<>();
     private Handler main;
     private AppContainer container;
     private DownloadCoordinator coordinator;
@@ -63,8 +68,6 @@ public class DownloadService extends Service {
     @Override public void onCreate() {
         super.onCreate();
         main = new Handler(getMainLooper());
-        // A bindService must not create a foreground notification. A foreground-start
-        // command promotes synchronously in onStartCommand before observer registration can delay it.
         container = ((App) getApplication()).container();
         coordinator = container.downloads;
         container.observe(observer);
@@ -73,7 +76,6 @@ public class DownloadService extends Service {
     @Override public IBinder onBind(Intent intent) { return binder; }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        // Satisfy the foreground-start contract before handling any command.
         executionPathStarted = true;
         awaitingQueuePublication = true;
         final long generation = ++startGeneration;
@@ -83,29 +85,26 @@ public class DownloadService extends Service {
             awaitingQueuePublication = false;
             if (active() == null && !hasQueued()) leaveForeground(startId, generation);
         }));
-        TaskSnapshot active = active();
-        if (intent != null && active != null
-                && active.request.id.toString().equals(intent.getStringExtra(EXTRA_TASK))) {
-            if (ACTION_CANCEL.equals(intent.getAction())) coordinator.cancel(active.request.id);
-            else if (ACTION_PAUSE.equals(intent.getAction())) coordinator.pause(active.request.id);
-            else if (ACTION_RESUME.equals(intent.getAction())) coordinator.resume(active.request.id);
+        TaskSnapshot current = active();
+        if (intent != null && NotificationPolicy.matchesAction(current,
+                intent.getStringExtra(EXTRA_TASK), intent.getStringExtra(EXTRA_EXECUTION))) {
+            if (ACTION_CANCEL.equals(intent.getAction())) coordinator.cancel(current.request.id);
+            else if (ACTION_PAUSE.equals(intent.getAction())) coordinator.pause(current.request.id);
+            else if (ACTION_RESUME.equals(intent.getAction())) coordinator.resume(current.request.id);
         }
         return START_NOT_STICKY;
     }
 
-    /** All UI/service calls are on the main thread; worker events are posted there. */
     public static void enqueue(android.content.Context context, DownloadTask legacy) {
         android.content.Context appCtx = context.getApplicationContext();
         AppContainer container = ((App) appCtx).container();
-        DownloadRequest request = LegacyTaskMapper.freeze(legacy);
+        io.github.idex.ytrdroid.domain.model.DownloadRequest request = LegacyTaskMapper.freeze(legacy);
         ContextCompat.startForegroundService(appCtx, new Intent(appCtx, DownloadService.class));
         container.downloads.setExecutionEnabled(true);
         container.downloads.enqueue(request);
     }
 
-    public void enqueue(DownloadTask legacy) {
-        enqueue(this, legacy);
-    }
+    public void enqueue(DownloadTask legacy) { enqueue(this, legacy); }
 
     public void retryTask(DownloadTask task) {
         TaskSnapshot stored = find(task);
@@ -123,8 +122,8 @@ public class DownloadService extends Service {
     }
 
     public void pauseCurrentTask() {
-        TaskSnapshot active = active();
-        if (active != null) coordinator.pause(active.request.id);
+        TaskSnapshot current = active();
+        if (current != null) coordinator.pause(current.request.id);
     }
 
     public void cancelTask(DownloadTask task) {
@@ -137,7 +136,6 @@ public class DownloadService extends Service {
         if (stored != null) coordinator.remove(stored.request.id);
     }
 
-    /** Compatibility projection only: changing these DTOs cannot change the queue. */
     public List<DownloadTask> getTasks() {
         List<DownloadTask> result = new ArrayList<>();
         for (TaskSnapshot snapshot : snapshots) result.add(LegacyTaskMapper.fromSnapshot(snapshot));
@@ -164,12 +162,16 @@ public class DownloadService extends Service {
     }
 
     private void enterForeground() {
-        startForeground(NOTIFICATION_ID, buildNotification(active()));
-        foreground = true;
+        try {
+            startForeground(NOTIFICATION_ID, buildNotification(active()));
+            foreground = true;
+        } catch (SecurityException denied) {
+            foreground = false;
+        }
     }
 
     private void leaveForeground(int startId, long generation) {
-        if (generation != startGeneration || active() != null || hasQueued()) return;
+        if (generation != startGeneration || awaitingQueuePublication || NotificationPolicy.hasWork(snapshots)) return;
         if (foreground) stopForeground(STOP_FOREGROUND_REMOVE);
         foreground = false;
         if (startId == 0) stopSelf(); else stopSelf(startId);
@@ -177,24 +179,30 @@ public class DownloadService extends Service {
 
     private void onSnapshots(List<TaskSnapshot> updated) {
         if (destroyed) return;
+        List<TaskSnapshot> previous = snapshots;
         snapshots = updated;
-        TaskSnapshot active = active();
+        TaskSnapshot current = active();
+        publishTerminalTransitions(previous, updated);
         if (executionPathStarted) {
             long now = android.os.SystemClock.elapsedRealtime();
-            if (active != null && (!foreground || active.state != lastNotificationState
-                    || !active.executionId.equals(lastExecution) || now - lastNotificationTime >= 400)) {
-                startForeground(NOTIFICATION_ID, buildNotification(active));
-                foreground = true;
+            if (current != null && (!foreground || current.state != lastNotificationState
+                    || !java.util.Objects.equals(current.executionId, lastExecution)
+                    || now - lastNotificationTime >= 400)) {
+                updateForeground(current);
                 lastNotificationTime = now;
-                lastNotificationState = active.state;
-                lastExecution = active.executionId;
+                lastNotificationState = current.state;
+                lastExecution = current.executionId;
+            }
+            if (!NotificationPolicy.hasWork(snapshots) && !awaitingQueuePublication) {
+                final long generation = startGeneration;
+                main.post(() -> leaveForeground(0, generation));
             }
         }
-        if (active != null && (active.state == TaskSnapshot.State.PAUSING
-                || active.state == TaskSnapshot.State.CANCELLING)
-                && !active.executionId.equals(stoppingExecution)) {
-            stoppingExecution = active.executionId;
-            UUID execution = active.executionId;
+        if (current != null && (current.state == TaskSnapshot.State.PAUSING
+                || current.state == TaskSnapshot.State.CANCELLING)
+                && !current.executionId.equals(stoppingExecution)) {
+            stoppingExecution = current.executionId;
+            UUID execution = current.executionId;
             main.postDelayed(() -> coordinator.stoppingDeadline(execution), 10000);
         }
         if (!listenerPending) {
@@ -206,21 +214,58 @@ public class DownloadService extends Service {
         }
     }
 
-    private boolean hasQueued() {
-        for (TaskSnapshot task : snapshots) {
-            if (task.state == TaskSnapshot.State.QUEUED || task.state == TaskSnapshot.State.PAUSED) return true;
+    private void publishTerminalTransitions(List<TaskSnapshot> previous, List<TaskSnapshot> updated) {
+        Map<UUID, TaskSnapshot> oldStates = new HashMap<>();
+        for (TaskSnapshot task : previous) oldStates.put(task.request.id, task);
+        for (TaskSnapshot task : updated) {
+            if (!NotificationPolicy.isTerminalTransition(oldStates.get(task.request.id), task)
+                    && !(previous.isEmpty() && (task.state == TaskSnapshot.State.DONE
+                        || task.state == TaskSnapshot.State.ERROR))) continue;
+            String execution = task.executionId == null ? "none" : task.executionId.toString();
+            String key = task.request.id + ":" + execution;
+            if (deliveredTerminalExecutions.contains(key)) continue;
+            String message = task.state == TaskSnapshot.State.DONE ? "Готово"
+                    : task.error != null && task.error.message != null && !task.error.message.trim().isEmpty()
+                    ? task.error.message : "Не удалось выполнить загрузку";
+            Notification notification = new NotificationCompat.Builder(this, App.CHANNEL_RESULTS)
+                    .setSmallIcon(R.drawable.ic_downloads_nav)
+                    .setContentTitle(NotificationSummary.title(task))
+                    .setContentText(message)
+                    .setStyle(new NotificationCompat.BigTextStyle().bigText(message))
+                    .setContentIntent(PendingIntent.getActivity(this, 0,
+                            new Intent(this, MainActivity.class), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE))
+                    .setAutoCancel(true).build();
+            try {
+                ((NotificationManager) getSystemService(NOTIFICATION_SERVICE))
+                        .notify("result:" + task.request.id, 0, notification);
+                deliveredTerminalExecutions.add(key);
+            } catch (SecurityException ignored) { }
         }
+    }
+
+    private void updateForeground(TaskSnapshot task) {
+        try {
+            startForeground(NOTIFICATION_ID, buildNotification(task));
+            foreground = true;
+        } catch (SecurityException denied) {
+            foreground = false;
+        }
+    }
+
+    private boolean hasQueued() {
+        for (TaskSnapshot task : snapshots) if (task.state == TaskSnapshot.State.QUEUED) return true;
         return false;
     }
 
     private TaskSnapshot active() {
         for (TaskSnapshot task : snapshots) {
             switch (task.state) {
-                case ANALYZING: case TRANSLATING: case DOWNLOADING: case PROCESSING: case PAUSING: case CANCELLING: case PAUSED:
-                    return task;
+                case ANALYZING: case TRANSLATING: case DOWNLOADING: case PROCESSING:
+                case PAUSING: case CANCELLING: return task;
                 default: break;
             }
         }
+        for (TaskSnapshot task : snapshots) if (task.state == TaskSnapshot.State.PAUSED) return task;
         return null;
     }
 
@@ -228,8 +273,7 @@ public class DownloadService extends Service {
         String executionId = task.executionId != null ? task.executionId.toString() : task.request.id.toString();
         Intent intent = new Intent(this, DownloadService.class).setAction(action)
                 .setData(Uri.parse("ytrd://execution/" + executionId + "/" + action))
-                .putExtra(EXTRA_TASK, task.request.id.toString())
-                .putExtra(EXTRA_EXECUTION, executionId);
+                .putExtra(EXTRA_TASK, task.request.id.toString()).putExtra(EXTRA_EXECUTION, executionId);
         return PendingIntent.getService(this, 0, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
@@ -238,27 +282,20 @@ public class DownloadService extends Service {
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         boolean isPaused = task != null && task.state == TaskSnapshot.State.PAUSED;
-        String contentText = isPaused ? "На паузе" : (task == null ? "Подготовка…" : task.stageText);
-
+        String title = task == null ? "ytrd" : NotificationSummary.title(task);
+        String details = task == null ? "Подготовка…" : NotificationSummary.details(task);
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, App.CHANNEL_DOWNLOADS)
-                .setSmallIcon(R.drawable.ic_downloads_nav)
-                .setContentTitle(task == null || task.request.title == null ? "ytrd" : task.request.title)
-                .setContentText(contentText)
+                .setSmallIcon(R.drawable.ic_downloads_nav).setContentTitle(title).setContentText(details)
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(details))
                 .setContentIntent(open).setOnlyAlertOnce(true).setOngoing(true);
-
-        if (isPaused) {
-            builder.setProgress(100, (int) Math.max(0, task.progress), false);
+        if (task == null) {
+            builder.setProgress(100, 0, true);
         } else {
-            builder.setProgress(100, task == null ? 0 : (int) Math.max(0, task.progress),
-                    task == null || task.progress < 0);
-        }
-
-        if (task != null) {
-            if (isPaused) {
-                builder.addAction(R.drawable.ic_play, "Продолжить", action(ACTION_RESUME, task));
-            } else if (task.state != TaskSnapshot.State.PAUSING && task.state != TaskSnapshot.State.CANCELLING) {
+            int progress = task.progress < 0 ? 0 : Math.max(0, Math.min(100, Math.round(task.progress)));
+            builder.setProgress(100, progress, task.progress < 0);
+            if (isPaused) builder.addAction(R.drawable.ic_play, "Продолжить", action(ACTION_RESUME, task));
+            else if (task.state != TaskSnapshot.State.PAUSING && task.state != TaskSnapshot.State.CANCELLING)
                 builder.addAction(R.drawable.ic_pause, "Пауза", action(ACTION_PAUSE, task));
-            }
             builder.addAction(R.drawable.ic_close, "Отмена", action(ACTION_CANCEL, task));
         }
         return builder.build();
