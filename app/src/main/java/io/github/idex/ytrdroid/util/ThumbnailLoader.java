@@ -79,7 +79,10 @@ public final class ThumbnailLoader {
             return;
         }
 
-        target.setImageDrawable(null);
+        // Keep existing preview/placeholder while loading; do not clear with null
+        if (target.getDrawable() == null) {
+            target.setImageDrawable(null);
+        }
 
         executor.execute(() -> {
             Bitmap bmp = null;

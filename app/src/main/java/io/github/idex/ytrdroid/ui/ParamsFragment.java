@@ -404,11 +404,11 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
             }
         }
 
-        // Load thumbnail using ThumbnailLoader
-        if (info.thumbnail != null) {
-            ImageView imgThumb = getView() != null ? getView().findViewById(R.id.img_thumb) : null;
-            if (imgThumb != null) {
-                imgThumb.setVisibility(View.VISIBLE);
+        // Load thumbnail using ThumbnailLoader if not already shown
+        ImageView imgThumb = getView() != null ? getView().findViewById(R.id.img_thumb) : null;
+        if (imgThumb != null) {
+            imgThumb.setVisibility(View.VISIBLE);
+            if (imgThumb.getDrawable() == null && info.thumbnail != null) {
                 ThumbnailLoader.getInstance().load(info.thumbnail, imgThumb);
             }
         }
