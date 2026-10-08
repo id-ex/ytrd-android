@@ -70,13 +70,15 @@ public class DownloadEngine {
     private VideoInfo doFetchInfo(Context context, String url, String processId) throws Exception {
         YoutubeDLRequest req = new YoutubeDLRequest(url);
         req.addOption("--dump-json");
-        req.addOption("--no-download");
-        req.addOption("-f", "bv+ba/b");
+        req.addOption("--skip-download");
         req.addOption("--no-playlist");
-        req.addOption("--no-check-formats");
-        req.addOption("--compat-options", "no-live-chat");
+        req.addOption("--no-warnings");
 
         if (context != null) {
+            File cacheDir = new File(context.getCacheDir(), "ytdlp");
+            if (!cacheDir.exists()) cacheDir.mkdirs();
+            req.addOption("--cache-dir", cacheDir.getAbsolutePath());
+
             File cookiesFile = new File(context.getFilesDir(), "cookies.txt");
             if (cookiesFile.exists() && cookiesFile.length() > 0) {
                 req.addOption("--cookies", cookiesFile.getAbsolutePath());
@@ -84,8 +86,10 @@ public class DownloadEngine {
         }
 
         checkCancelled();
+        long start = System.currentTimeMillis();
         com.yausername.youtubedl_android.YoutubeDLResponse resp =
                 YoutubeDL.getInstance().execute(req, processId, null);
+        Log.e(TAG, "Fetch info completed in " + (System.currentTimeMillis() - start) + " ms");
         checkCancelled();
 
         return io.github.idex.ytrdroid.data.ytdlp.YtDlpMetadataParser.parse(resp.getOut(), url);

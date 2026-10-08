@@ -22,6 +22,13 @@ public class App extends Application {
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
+        try {
+            org.schabi.newpipe.extractor.NewPipe.init(
+                    new io.github.idex.ytrdroid.data.newpipe.OkHttpDownloader(null),
+                    org.schabi.newpipe.extractor.localization.Localization.DEFAULT);
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to init NewPipe extractor: " + e.getMessage());
+        }
         container = new io.github.idex.ytrdroid.di.AppContainer(this);
         container.runtime.init();
     }

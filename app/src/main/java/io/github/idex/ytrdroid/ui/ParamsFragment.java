@@ -45,9 +45,6 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
     private android.widget.EditText urlField;
     private View options;
     private static final String ARG_URL = "url";
-    private static final List<String> STANDARD_QUALITIES = java.util.Arrays.asList(
-            "1080", "720", "480", "360", "auto"
-    );
     private VideoInfo info;
     private String previewTitle;
     private String previewThumb;
@@ -241,11 +238,13 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
         String url = "https://www.youtube.com/watch?v=" + id;
         final int generation = ++analysisGeneration;
         loading = true;
-        setupInitialOptions();
+        options.setVisibility(View.GONE);
+        btnDownload.setEnabled(true);
+        btnDownload.setVisibility(View.VISIBLE);
         txtTitle.setText(R.string.analyzing);
         txtUploader.setText("Получение информации о видео…");
 
-        // Этап 1 (Мгновенное превью oEmbed)
+        // Этап 1 (Мгновенное превью oEmbed — 200 мс)
         new Thread(() -> {
             OEmbedClient.PreviewInfo preview = OEmbedClient.fetch(id);
             if (preview != null && getActivity() != null) {
@@ -262,11 +261,46 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                         imgThumb.setVisibility(View.VISIBLE);
                         ThumbnailLoader.getInstance().load(preview.thumbnailUrl, imgThumb);
                     }
+                    // Если название на русском, сразу информируем о ненадобности перевода
+                    if (preview.title != null && preview.title.matches(".*[а-яА-ЯёЁ].*")) {
+                        txtLangStatus.setText(R.string.translation_not_needed);
+                        txtLangStatus.setVisibility(View.VISIBLE);
+                        switchTranslate.setChecked(false);
+                        switchTranslate.setEnabled(false);
+                    }
                 });
             }
         }, "oembed-preview").start();
 
-        // Этап 2 (Фоновый yt-dlp с оптимизированными флагами)
+        // Параллельная быстрая проверка наличия перевода VOT (300 мс)
+        new Thread(() -> {
+            VotClient vot = new VotClient();
+            boolean isLive = spinnerVoice != null && spinnerVoice.getSelectedItemPosition() == 1;
+            VotClient.TranslationResult tr = vot.checkStatus(url, 341.0, isLive, "en");
+            if (getActivity() != null) {
+                getActivity().runOnUiThread(() -> {
+                    if (getView() == null || generation != analysisGeneration) return;
+                    if (info != null && VotClient.isRussian(info.language)) return;
+                    txtLangStatus.setTextColor(getResources().getColor(R.color.text_secondary, null));
+                    if (tr != null && tr.success) {
+                        if ("Ready".equals(tr.status)) {
+                            txtLangStatus.setText("Перевод готов");
+                        } else if ("Waiting".equals(tr.status)) {
+                            txtLangStatus.setText("Перевод готовится (попробуйте позже)");
+                        } else {
+                            String msg = tr.message != null && !tr.message.isEmpty() ? tr.message : "недоступен";
+                            txtLangStatus.setText(getString(R.string.translation_status_message, msg));
+                        }
+                    } else {
+                        String msg = tr != null && tr.message != null && !tr.message.isEmpty() ? tr.message : "недоступен";
+                        txtLangStatus.setText(getString(R.string.translation_unavailable_message, msg));
+                    }
+                    txtLangStatus.setVisibility(View.VISIBLE);
+                });
+            }
+        }, "vot-status-check").start();
+
+        // Этап 2: Быстрое получение форматов через NewPipeExtractor (~1 сек) с fallback на yt-dlp
         Context ctx = requireContext().getApplicationContext();
         DownloadEngine engine = new DownloadEngine();
         String processId = java.util.UUID.randomUUID().toString();
@@ -274,12 +308,23 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
         analysisProcessId = processId;
         new Thread(() -> {
             try {
-                VideoInfo result = engine.fetchInfo(ctx, url, processId);
+                VideoInfo result = null;
+                try {
+                    result = io.github.idex.ytrdroid.data.newpipe.NewPipeMetadataExtractor.extract(url);
+                } catch (Exception npe) {
+                    android.util.Log.w("ParamsFragment", "NewPipeExtractor failed (" + npe.getMessage() + "), falling back to yt-dlp");
+                }
+
+                if (result == null) {
+                    result = engine.fetchInfo(ctx, url, processId);
+                }
+
+                final VideoInfo finalResult = result;
                 if (getActivity() != null) {
                     getActivity().runOnUiThread(() -> {
                         if (getView() == null || generation != analysisGeneration) return;
-                        VideoInfoCache.put(id, result);
-                        info = result;
+                        VideoInfoCache.put(id, finalResult);
+                        info = finalResult;
                         options.setVisibility(View.VISIBLE);
                         btnDownload.setEnabled(true);
                         btnDownload.setVisibility(View.VISIBLE);
@@ -307,32 +352,6 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                 }
             }
         }, "fetch-info").start();
-    }
-
-    private void setupInitialOptions() {
-        options.setVisibility(View.VISIBLE);
-        btnDownload.setEnabled(true);
-        btnDownload.setVisibility(View.VISIBLE);
-
-        List<String> qLabels = new ArrayList<>();
-        for (String q : STANDARD_QUALITIES) {
-            if ("auto".equalsIgnoreCase(q)) {
-                qLabels.add("Auto · MP4");
-            } else {
-                qLabels.add(q + "p · MP4");
-            }
-        }
-        spinnerQuality.setAdapter(new ArrayAdapter<>(requireContext(),
-                android.R.layout.simple_spinner_dropdown_item, qLabels));
-
-        io.github.idex.ytrdroid.App appInstance = (io.github.idex.ytrdroid.App) requireContext().getApplicationContext();
-        String defaultQ = appInstance.container().settings.getDefaultQuality();
-        for (int i = 0; i < STANDARD_QUALITIES.size(); i++) {
-            if (STANDARD_QUALITIES.get(i).equalsIgnoreCase(defaultQ)) {
-                spinnerQuality.setSelection(i);
-                break;
-            }
-        }
     }
 
     private void cancelAnalysis() {
@@ -465,26 +484,16 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
             task.title = previewTitle;
             task.thumbnail = previewThumb;
             task.duration = 0;
-
-            boolean isVideo = toggleType.getCheckedButtonId() == R.id.btn_video;
-            if (isVideo) {
-                int pos = spinnerQuality.getSelectedItemPosition();
-                task.quality = (pos >= 0 && pos < STANDARD_QUALITIES.size())
-                        ? STANDARD_QUALITIES.get(pos) : "auto";
-                task.ext = "mp4";
-                try {
-                    if (Integer.parseInt(task.quality) > 1080) task.ext = "mkv";
-                } catch (NumberFormatException ignored) {}
-            } else {
-                task.quality = "audio";
-                task.ext = "mp3";
-            }
+            task.quality = settings.getDefaultQuality();
+            if (task.quality == null || task.quality.isEmpty()) task.quality = "auto";
             task.translate = switchTranslate.isChecked();
-            task.liveVoice = spinnerVoice.getSelectedItemPosition() == 1;
-            task.audioMode = radioAudioMode.getCheckedRadioButtonId() == R.id.radio_dual
-                    ? "dual" : "mix";
-            task.subtitles = isVideo && switchSubtitles.isChecked();
-            task.language = "en";
+            task.liveVoice = "live".equals(settings.getDefaultVoice());
+            task.audioMode = "dual".equals(settings.getDefaultAudioMode()) ? "dual" : "mix";
+            task.subtitles = false;
+            task.language = null;
+            int desiredHeight = 0;
+            try { desiredHeight = Integer.parseInt(task.quality); } catch (NumberFormatException ignored) {}
+            task.ext = desiredHeight > 1080 ? "mkv" : "mp4";
         } else {
             task.url = info.url;
             task.title = info.title;
