@@ -24,6 +24,7 @@ import java.util.function.Consumer;
 
 import io.github.idex.ytrdroid.App;
 import io.github.idex.ytrdroid.R;
+import io.github.idex.ytrdroid.ui.MainActivity;
 import io.github.idex.ytrdroid.application.DownloadCoordinator;
 import io.github.idex.ytrdroid.domain.model.TaskSnapshot;
 import io.github.idex.ytrdroid.di.AppContainer;
@@ -227,13 +228,21 @@ public class DownloadService extends Service {
             String message = task.state == TaskSnapshot.State.DONE ? "Готово"
                     : task.error != null && task.error.message != null && !task.error.message.trim().isEmpty()
                     ? task.error.message : "Не удалось выполнить загрузку";
+            String targetScreen = task.state == TaskSnapshot.State.DONE
+                    ? MainActivity.SCREEN_FILES
+                    : MainActivity.SCREEN_DOWNLOADS;
+            Intent openIntent = new Intent(this, MainActivity.class);
+            openIntent.putExtra(MainActivity.EXTRA_SCREEN, targetScreen);
+            openIntent.setData(Uri.parse("ytrd://notification/" + task.request.id + "/" + targetScreen));
+            PendingIntent openPending = PendingIntent.getActivity(this, 0, openIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
             Notification notification = new NotificationCompat.Builder(this, App.CHANNEL_RESULTS)
                     .setSmallIcon(R.drawable.ic_downloads_nav)
                     .setContentTitle(NotificationSummary.title(task))
                     .setContentText(message)
                     .setStyle(new NotificationCompat.BigTextStyle().bigText(message))
-                    .setContentIntent(PendingIntent.getActivity(this, 0,
-                            new Intent(this, MainActivity.class), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE))
+                    .setContentIntent(openPending)
                     .setAutoCancel(true).build();
             try {
                 ((NotificationManager) getSystemService(NOTIFICATION_SERVICE))
@@ -279,7 +288,10 @@ public class DownloadService extends Service {
     }
 
     private Notification buildNotification(TaskSnapshot task) {
-        PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class),
+        Intent openIntent = new Intent(this, MainActivity.class);
+        openIntent.putExtra(MainActivity.EXTRA_SCREEN, MainActivity.SCREEN_DOWNLOADS);
+        openIntent.setData(Uri.parse("ytrd://notification/progress"));
+        PendingIntent open = PendingIntent.getActivity(this, 0, openIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         boolean isPaused = task != null && task.state == TaskSnapshot.State.PAUSED;
         String title = task == null ? "ytrd" : NotificationSummary.title(task);

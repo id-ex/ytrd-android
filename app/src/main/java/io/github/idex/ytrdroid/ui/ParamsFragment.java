@@ -45,7 +45,12 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
     private android.widget.EditText urlField;
     private View options;
     private static final String ARG_URL = "url";
+    private static final List<String> STANDARD_QUALITIES = java.util.Arrays.asList(
+            "1080", "720", "480", "360", "auto"
+    );
     private VideoInfo info;
+    private String previewTitle;
+    private String previewThumb;
     private boolean loading = true;
 
     // Views
@@ -137,6 +142,8 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                 analysisGeneration++;
                 cancelAnalysis();
                 info = null;
+                previewTitle = null;
+                previewThumb = null;
                 loading = true;
                 options.setVisibility(View.GONE);
                 boolean validUrl = UrlUtil.extractVideoId(s == null ? "" : s.toString()) != null;
@@ -234,9 +241,7 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
         String url = "https://www.youtube.com/watch?v=" + id;
         final int generation = ++analysisGeneration;
         loading = true;
-        btnDownload.setEnabled(true);
-        btnDownload.setVisibility(View.VISIBLE);
-        options.setVisibility(View.GONE);
+        setupInitialOptions();
         txtTitle.setText(R.string.analyzing);
         txtUploader.setText("Получение информации о видео…");
 
@@ -246,6 +251,8 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
             if (preview != null && getActivity() != null) {
                 getActivity().runOnUiThread(() -> {
                     if (getView() == null || generation != analysisGeneration || info != null) return;
+                    previewTitle = preview.title;
+                    previewThumb = preview.thumbnailUrl;
                     txtTitle.setText(preview.title);
                     txtUploader.setText(preview.author != null
                             ? getString(R.string.analysis_formats_author, preview.author)
@@ -300,6 +307,32 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                 }
             }
         }, "fetch-info").start();
+    }
+
+    private void setupInitialOptions() {
+        options.setVisibility(View.VISIBLE);
+        btnDownload.setEnabled(true);
+        btnDownload.setVisibility(View.VISIBLE);
+
+        List<String> qLabels = new ArrayList<>();
+        for (String q : STANDARD_QUALITIES) {
+            if ("auto".equalsIgnoreCase(q)) {
+                qLabels.add("Auto · MP4");
+            } else {
+                qLabels.add(q + "p · MP4");
+            }
+        }
+        spinnerQuality.setAdapter(new ArrayAdapter<>(requireContext(),
+                android.R.layout.simple_spinner_dropdown_item, qLabels));
+
+        io.github.idex.ytrdroid.App appInstance = (io.github.idex.ytrdroid.App) requireContext().getApplicationContext();
+        String defaultQ = appInstance.container().settings.getDefaultQuality();
+        for (int i = 0; i < STANDARD_QUALITIES.size(); i++) {
+            if (STANDARD_QUALITIES.get(i).equalsIgnoreCase(defaultQ)) {
+                spinnerQuality.setSelection(i);
+                break;
+            }
+        }
     }
 
     private void cancelAnalysis() {
@@ -429,18 +462,29 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
         DownloadTask task = new DownloadTask();
         if (info == null) {
             task.url = "https://www.youtube.com/watch?v=" + videoId;
-            task.title = null;
+            task.title = previewTitle;
+            task.thumbnail = previewThumb;
             task.duration = 0;
-            task.quality = settings.getDefaultQuality();
-            if (task.quality == null || task.quality.isEmpty()) task.quality = "auto";
-            task.translate = settings.isTranslateDefault();
-            task.liveVoice = "live".equals(settings.getDefaultVoice());
-            task.audioMode = "dual".equals(settings.getDefaultAudioMode()) ? "dual" : "mix";
-            task.subtitles = false;
-            task.language = null;
-            int desiredHeight = 0;
-            try { desiredHeight = Integer.parseInt(task.quality); } catch (NumberFormatException ignored) {}
-            task.ext = desiredHeight > 1080 ? "mkv" : "mp4";
+
+            boolean isVideo = toggleType.getCheckedButtonId() == R.id.btn_video;
+            if (isVideo) {
+                int pos = spinnerQuality.getSelectedItemPosition();
+                task.quality = (pos >= 0 && pos < STANDARD_QUALITIES.size())
+                        ? STANDARD_QUALITIES.get(pos) : "auto";
+                task.ext = "mp4";
+                try {
+                    if (Integer.parseInt(task.quality) > 1080) task.ext = "mkv";
+                } catch (NumberFormatException ignored) {}
+            } else {
+                task.quality = "audio";
+                task.ext = "mp3";
+            }
+            task.translate = switchTranslate.isChecked();
+            task.liveVoice = spinnerVoice.getSelectedItemPosition() == 1;
+            task.audioMode = radioAudioMode.getCheckedRadioButtonId() == R.id.radio_dual
+                    ? "dual" : "mix";
+            task.subtitles = isVideo && switchSubtitles.isChecked();
+            task.language = "en";
         } else {
             task.url = info.url;
             task.title = info.title;

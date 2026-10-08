@@ -19,6 +19,10 @@ import io.github.idex.ytrdroid.service.DownloadService;
 import io.github.idex.ytrdroid.util.UrlUtil;
 
 public class MainActivity extends AppCompatActivity {
+    public static final String EXTRA_SCREEN = "extra_screen";
+    public static final String SCREEN_DOWNLOADS = "downloads";
+    public static final String SCREEN_FILES = "files";
+
     private DownloadService downloadService;
     private boolean bound;
     private String pendingUrl;
@@ -95,7 +99,13 @@ public class MainActivity extends AppCompatActivity {
                     .addToBackStack(null).commit();
         });
         if (savedInstanceState == null) {
-            showFragment(new FilesFragment());
+            String targetScreen = getIntent() != null ? getIntent().getStringExtra(EXTRA_SCREEN) : null;
+            if (SCREEN_DOWNLOADS.equals(targetScreen)) {
+                showFragment(new FilesFragment());
+                openDownloads();
+            } else {
+                showFragment(new FilesFragment());
+            }
             handleIncomingIntent(getIntent());
         }
 
@@ -231,6 +241,16 @@ public class MainActivity extends AppCompatActivity {
 
     private void handleIncomingIntent(Intent intent) {
         if (intent == null) return;
+        if (intent.hasExtra(EXTRA_SCREEN)) {
+            String screen = intent.getStringExtra(EXTRA_SCREEN);
+            setSelectionModeActive(false, null, null, null);
+            if (SCREEN_DOWNLOADS.equals(screen)) {
+                openDownloads();
+            } else if (SCREEN_FILES.equals(screen)) {
+                getSupportFragmentManager().popBackStack(null, androidx.fragment.app.FragmentManager.POP_BACK_STACK_INCLUSIVE);
+                showFragment(new FilesFragment());
+            }
+        }
         if (Intent.ACTION_SEND.equals(intent.getAction())) {
             CharSequence text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
             if (text != null) {
