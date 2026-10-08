@@ -285,7 +285,7 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                         if (getView() == null) return;
                         if (generation == analysisGeneration && info == null) {
                             txtTitle.setText(R.string.error);
-                            txtUploader.setText(e.getMessage());
+                            txtUploader.setText(DownloadEngine.formatDownloadError(e.getMessage()));
                             boolean validUrl = UrlUtil.extractVideoId(urlField.getText().toString()) != null;
                             btnDownload.setEnabled(validUrl);
                             btnDownload.setVisibility(validUrl ? View.VISIBLE : View.GONE);

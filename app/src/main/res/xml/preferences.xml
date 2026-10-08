@@ -75,6 +75,12 @@
         android:title="@string/pref_cat_storage">
 
         <Preference
+            android:key="youtube_login"
+            android:title="Вход в YouTube"
+            android:icon="@drawable/ic_logo_badge"
+            app:icon="@drawable/ic_logo_badge" />
+
+        <Preference
             android:key="cookies_file"
             android:title="@string/pref_cookies_file"
             android:icon="@drawable/ic_cookie"

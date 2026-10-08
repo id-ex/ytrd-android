@@ -91,7 +91,7 @@ public class VotClient {
             r.message = "VOT_HMAC_KEY не настроен";
             return r;
         }
-        return translateOnce(url, duration, liveVoice, sourceLang);
+        return translateOnce(url, duration, liveVoice, sourceLang, true);
     }
 
     /**
@@ -118,7 +118,7 @@ public class VotClient {
             }
             if (callback != null) callback.onAttempt(attempt + 1, MAX_ATTEMPTS);
 
-            TranslationResult r = translateOnce(url, duration, liveVoice, sourceLang);
+            TranslationResult r = translateOnce(url, duration, liveVoice, sourceLang, attempt == 0);
             if (!r.success) return r;
             if ("Ready".equals(r.status) && r.audioUrl != null) return r;
             if ("Waiting".equals(r.status)) {
@@ -147,9 +147,9 @@ public class VotClient {
     // ── protobuf encoding (minimal, matches ytrd/vot.py) ──
 
     private TranslationResult translateOnce(String url, double duration,
-                                            boolean liveVoice, String sourceLang) {
+                                            boolean liveVoice, String sourceLang, boolean firstRequest) {
         try {
-            byte[] body = buildRequestBody(url, duration, liveVoice, sourceLang);
+            byte[] body = buildRequestBody(url, duration, liveVoice, sourceLang, firstRequest);
             String sig = hmacSha256(body);
 
             Request req = new Request.Builder()
@@ -189,10 +189,10 @@ public class VotClient {
     }
 
     private byte[] buildRequestBody(String url, double duration,
-                                    boolean liveVoice, String sourceLang) {
+                                    boolean liveVoice, String sourceLang, boolean firstRequest) {
         byte[] b = new byte[0];
         b = append(b, encodeString(3, url));
-        b = append(b, encodeBool(5, true));
+        b = append(b, encodeBool(5, firstRequest));
         b = append(b, encodeDouble(6, duration));
         b = append(b, encodeInt(7, 1));
         b = append(b, encodeString(8, sourceLang));
@@ -213,7 +213,8 @@ public class VotClient {
 
         Integer status = getInt(fields, 4);
         String audioUrl = getString(fields, 1);
-        String message = getString(fields, 9);
+        String message = getString(fields, 7);
+        if (message == null) message = getString(fields, 9);
 
         if (status == null) {
             r.success = false;
@@ -230,6 +231,8 @@ public class VotClient {
                 r.message = message;
                 break;
             case 2:
+            case 3:
+            case 5:
             case 6:
             case 7:
                 r.success = true;

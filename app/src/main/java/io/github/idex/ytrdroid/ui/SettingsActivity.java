@@ -25,6 +25,7 @@ import java.io.InputStream;
 
 import io.github.idex.ytrdroid.App;
 import io.github.idex.ytrdroid.R;
+import io.github.idex.ytrdroid.util.CookieNetscapeWriter;
 
 public class SettingsActivity extends AppCompatActivity {
     @Override
@@ -56,6 +57,12 @@ public class SettingsActivity extends AppCompatActivity {
                     App app = (App) requireContext().getApplicationContext();
                     app.container().settings.setDownloadFolder(folder);
                     updateFolderSummary();
+                });
+
+        private final ActivityResultLauncher<Intent> loginLauncher =
+                registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                    updateCookiesSummary();
+                    updateYoutubeLoginSummary();
                 });
 
         private final ActivityResultLauncher<String[]> cookiesPicker =
@@ -114,6 +121,20 @@ public class SettingsActivity extends AppCompatActivity {
                     p.setSummary("Установлен (" + f.length() + " байт) · Нажмите для замены");
                 } else {
                     p.setSummary("Не выбран · Нажмите для выбора cookies.txt");
+                }
+            }
+        }
+
+        private void updateYoutubeLoginSummary() {
+            Preference p = findPreference("youtube_login");
+            if (p != null) {
+                File f = new File(requireContext().getFilesDir(), "cookies.txt");
+                if (CookieNetscapeWriter.hasLoginCookies(f)) {
+                    p.setTitle("Аккаунт YouTube");
+                    p.setSummary("Вход выполнен · Нажмите для повторного входа или выхода");
+                } else {
+                    p.setTitle("Войти в YouTube");
+                    p.setSummary("Вход через браузер для видео 18+ и обхода блокировок");
                 }
             }
         }
@@ -189,6 +210,38 @@ public class SettingsActivity extends AppCompatActivity {
 
             // Cookies file picker
             updateCookiesSummary();
+            updateYoutubeLoginSummary();
+
+            Preference loginPref = findPreference("youtube_login");
+            if (loginPref != null) {
+                loginPref.setOnPreferenceClickListener(pref -> {
+                    File f = new File(requireContext().getFilesDir(), "cookies.txt");
+                    if (CookieNetscapeWriter.hasLoginCookies(f)) {
+                        new MaterialAlertDialogBuilder(requireContext())
+                                .setTitle("Аккаунт YouTube")
+                                .setItems(new CharSequence[]{"Войти в другой аккаунт", "Выйти из аккаунта", "Отмена"}, (dialog, which) -> {
+                                    if (which == 0) {
+                                        loginLauncher.launch(new Intent(requireContext(), YouTubeLoginActivity.class));
+                                    } else if (which == 1) {
+                                        if (f.exists()) {
+                                            f.delete();
+                                        }
+                                        try {
+                                            android.webkit.CookieManager.getInstance().removeAllCookies(null);
+                                        } catch (Exception ignored) {}
+                                        updateCookiesSummary();
+                                        updateYoutubeLoginSummary();
+                                        Toast.makeText(requireContext(), "Выход выполнен", Toast.LENGTH_SHORT).show();
+                                    }
+                                })
+                                .show();
+                    } else {
+                        loginLauncher.launch(new Intent(requireContext(), YouTubeLoginActivity.class));
+                    }
+                    return true;
+                });
+            }
+
             Preference cookiesPref = findPreference("cookies_file");
             if (cookiesPref != null) {
                 cookiesPref.setOnPreferenceClickListener(pref -> {
@@ -204,6 +257,7 @@ public class SettingsActivity extends AppCompatActivity {
                                             f.delete();
                                         }
                                         updateCookiesSummary();
+                                        updateYoutubeLoginSummary();
                                         Toast.makeText(requireContext(), "Файл cookies удален", Toast.LENGTH_SHORT).show();
                                     }
                                 })

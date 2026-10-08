@@ -383,7 +383,7 @@ public class DownloadEngine {
             }
             Log.e(TAG, "Download failed", e);
             task.state = DownloadTask.State.ERROR;
-            task.errorMessage = e.getMessage();
+            task.errorMessage = formatDownloadError(e.getMessage());
             if (listener != null) listener.onStateChanged(task);
         } finally {
             currentThread = null;
@@ -402,6 +402,28 @@ public class DownloadEngine {
             }
             currentProcess = null;
         }
+    }
+
+    public static String formatDownloadError(String raw) {
+        if (raw == null) return "Ошибка загрузки";
+        String lower = raw.toLowerCase(java.util.Locale.ROOT);
+        if (lower.contains("sign in to confirm your age") || lower.contains("confirm your age")) {
+            return "Возрастное ограничение (18+). Выполните вход в YouTube в Настройках приложения";
+        }
+        if (lower.contains("sign in to confirm you're not a bot") || lower.contains("sign in to confirm you’re not a bot")
+                || (lower.contains("bot") && lower.contains("sign in"))) {
+            return "Защита от ботов YouTube. Выполните вход в YouTube в Настройках приложения";
+        }
+        if (lower.contains("private video") || lower.contains("members-only") || lower.contains("join this channel")) {
+            return "Приватное видео или доступ для спонсоров. Выполните вход в YouTube в Настройках приложения";
+        }
+        if (lower.contains("http error 403") && (lower.contains("youtube") || lower.contains("forbidden"))) {
+            return "Доступ заблокирован YouTube (403). Выполните вход в YouTube в Настройках приложения";
+        }
+        if (lower.contains("use --cookies") || lower.contains("login required")) {
+            return "Требуется авторизация. Выполните вход в YouTube в Настройках приложения";
+        }
+        return raw;
     }
 
     private File findSubtitleFile(File dir, String prefix) {
