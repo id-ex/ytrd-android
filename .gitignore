@@ -8,7 +8,7 @@ local.properties
 __pycache__/
 *.pyc
 Screenshot_*.jpg
-screenshot_*.png
+screenshot*.png
 .env
 .env.*
 !.env.example

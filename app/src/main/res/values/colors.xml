@@ -3,6 +3,10 @@
     <color name="bg_dark">#FF121212</color>
     <color name="surface_dark">#FF1E1E1E</color>
     <color name="card_dark">#FF2A2A2A</color>
+    <color name="card_selected">#FF462224</color>
+    <color name="card_selected_stroke">#80E53935</color>
+    <color name="swipe_delete_bg">#FFE53935</color>
+    <color name="swipe_repeat_bg">#FF333333</color>
     <color name="accent">#FFE53935</color>
     <color name="accent_dark">#FFB71C1C</color>
     <color name="text_primary">#FFFFFFFF</color>

@@ -24,8 +24,14 @@ public interface ArtifactDao {
     @Query("UPDATE artifacts SET hidden = 1 WHERE id = :id")
     void hide(String id);
 
+    @Query("UPDATE artifacts SET hidden = 1 WHERE id IN (:ids)")
+    void hideAll(List<String> ids);
+
     @Query("DELETE FROM artifacts WHERE id = :id")
     void delete(String id);
+
+    @Query("DELETE FROM artifacts WHERE id IN (:ids)")
+    void deleteAll(List<String> ids);
 
     @Query("SELECT COUNT(*) FROM artifacts")
     int count();

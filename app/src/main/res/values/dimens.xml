@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Card dimensions -->
+    <dimen name="card_corner_radius">12dp</dimen>
+    <dimen name="card_selected_stroke_width">1.5dp</dimen>
+
+    <!-- Swipe actions -->
+    <dimen name="swipe_action_icon_size">24dp</dimen>
+    <dimen name="swipe_action_icon_margin">20dp</dimen>
+
+    <!-- Selection FABs -->
+    <dimen name="fab_secondary_size">34dp</dimen>
+    <dimen name="fab_secondary_icon_size">18dp</dimen>
+    <dimen name="fab_secondary_margin_bottom">10dp</dimen>
+    <dimen name="fab_margin">24dp</dimen>
+</resources>

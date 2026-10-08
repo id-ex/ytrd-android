@@ -39,9 +39,23 @@ public final class ArtifactRepository {
         });
     }
 
+    public void hideAll(List<String> ids, Runnable onComplete) {
+        executor.execute(() -> {
+            dao.hideAll(ids);
+            if (onComplete != null) onComplete.run();
+        });
+    }
+
     public void delete(String id, Runnable onComplete) {
         executor.execute(() -> {
             dao.delete(id);
+            if (onComplete != null) onComplete.run();
+        });
+    }
+
+    public void deleteAll(List<String> ids, Runnable onComplete) {
+        executor.execute(() -> {
+            dao.deleteAll(ids);
             if (onComplete != null) onComplete.run();
         });
     }

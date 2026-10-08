@@ -23,7 +23,9 @@ public class LegacyHistoryMigratorTest {
         @Override public ArtifactEntity get(String id) { return null; }
         @Override public List<ArtifactEntity> getAllVisible() { return inserted; }
         @Override public void hide(String id) {}
+        @Override public void hideAll(List<String> ids) {}
         @Override public void delete(String id) {}
+        @Override public void deleteAll(List<String> ids) {}
         @Override public int count() { return inserted.size(); }
     }
 
