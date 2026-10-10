@@ -25,6 +25,7 @@ import java.io.InputStream;
 
 import io.github.idex.ytrdroid.App;
 import io.github.idex.ytrdroid.R;
+import io.github.idex.ytrdroid.data.updater.AppUpdateChecker;
 import io.github.idex.ytrdroid.util.CookieNetscapeWriter;
 
 public class SettingsActivity extends AppCompatActivity {
@@ -318,6 +319,37 @@ public class SettingsActivity extends AppCompatActivity {
                     }
                     pref.setSummary("Кэш очищен (0 Б)");
                     Toast.makeText(requireContext(), "Кэш очищен", Toast.LENGTH_SHORT).show();
+                    return true;
+                });
+            }
+
+            // Check app update
+            Preference checkAppUpdate = findPreference("check_app_update");
+            if (checkAppUpdate != null) {
+                checkAppUpdate.setOnPreferenceClickListener(pref -> {
+                    Toast.makeText(requireContext(), "Проверка обновлений…", Toast.LENGTH_SHORT).show();
+                    AppUpdateChecker.check(new AppUpdateChecker.Callback() {
+                        @Override
+                        public void onUpdateAvailable(AppUpdateChecker.UpdateInfo info) {
+                            if (getActivity() != null && !getActivity().isFinishing()) {
+                                AppUpdateDialog.show(getActivity(), info);
+                            }
+                        }
+
+                        @Override
+                        public void onNoUpdateAvailable() {
+                            if (getContext() != null) {
+                                Toast.makeText(getContext(), "У вас установлена актуальная версия", Toast.LENGTH_SHORT).show();
+                            }
+                        }
+
+                        @Override
+                        public void onError(Throwable error) {
+                            if (getContext() != null) {
+                                Toast.makeText(getContext(), "Ошибка проверки: " + error.getMessage(), Toast.LENGTH_SHORT).show();
+                            }
+                        }
+                    });
                     return true;
                 });
             }

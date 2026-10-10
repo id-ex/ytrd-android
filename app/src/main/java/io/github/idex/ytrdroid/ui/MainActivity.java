@@ -15,6 +15,7 @@ import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import io.github.idex.ytrdroid.R;
+import io.github.idex.ytrdroid.data.updater.AppUpdateChecker;
 import io.github.idex.ytrdroid.service.DownloadService;
 import io.github.idex.ytrdroid.util.UrlUtil;
 
@@ -107,6 +108,22 @@ public class MainActivity extends AppCompatActivity {
                 showFragment(new FilesFragment());
             }
             handleIncomingIntent(getIntent());
+
+            // Check for app update in background on launch
+            AppUpdateChecker.check(new AppUpdateChecker.Callback() {
+                @Override
+                public void onUpdateAvailable(AppUpdateChecker.UpdateInfo info) {
+                    if (!isFinishing() && !isDestroyed()) {
+                        AppUpdateDialog.show(MainActivity.this, info);
+                    }
+                }
+
+                @Override
+                public void onNoUpdateAvailable() {}
+
+                @Override
+                public void onError(Throwable error) {}
+            });
         }
 
         // Bind to download service
