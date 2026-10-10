@@ -22,7 +22,7 @@ import okhttp3.Response;
 public final class AppUpdateChecker {
 
     public static final String GITHUB_REPO = "id-ex/ytrd-android";
-    private static final String API_URL = "https://api.github.com/repos/" + GITHUB_REPO + "/releases/latest";
+    private static final String API_URL = "https://api.github.com/repos/" + GITHUB_REPO + "/releases?per_page=1";
 
     public static class UpdateInfo {
         public final String currentVersion;
@@ -99,7 +99,17 @@ public final class AppUpdateChecker {
      */
     public static UpdateInfo parseReleaseJson(String json, String currentVersionName, String[] supportedAbis) {
         if (json == null || json.trim().isEmpty()) return null;
-        JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+        JsonElement rootElement = JsonParser.parseString(json);
+        JsonObject root;
+        if (rootElement.isJsonArray()) {
+            JsonArray array = rootElement.getAsJsonArray();
+            if (array.isEmpty()) return null;
+            root = array.get(0).getAsJsonObject();
+        } else if (rootElement.isJsonObject()) {
+            root = rootElement.getAsJsonObject();
+        } else {
+            return null;
+        }
 
         String tagName = getString(root, "tag_name");
         if (tagName == null || tagName.isEmpty()) return null;

@@ -65,6 +65,13 @@ public class AppUpdateCheckerTest {
         assertEquals("app-arm64-v8a-release.apk", arm64Info.apkName);
         assertEquals(61865984L, arm64Info.apkSize);
 
+        // Works equally well when GitHub wraps response in array (releases?per_page=1)
+        String jsonArray = "[" + json + "]";
+        AppUpdateChecker.UpdateInfo arrayInfo = AppUpdateChecker.parseReleaseJson(
+                jsonArray, "0.4.0", new String[]{"arm64-v8a"});
+        assertNotNull(arrayInfo);
+        assertEquals("0.4.1", arrayInfo.newVersion);
+
         // When armeabi-v7a is supported
         AppUpdateChecker.UpdateInfo armV7Info = AppUpdateChecker.parseReleaseJson(
                 json, "0.4.0", new String[]{"armeabi-v7a"});
