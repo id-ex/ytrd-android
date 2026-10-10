@@ -42,8 +42,31 @@ public final class RuntimeManager {
     public Status getStatus() { return status; }
     public boolean isReady() { return status == Status.READY; }
     public String getVersion() { return version; }
+    public String getCleanVersion() { return formatCleanVersion(version); }
     public String getInitError() { return initError; }
     public CompletableFuture<Boolean> getReadyFuture() { return readyFuture; }
+
+    /**
+     * Formats raw yt-dlp version string into a clean, human-readable date representation.
+     * E.g. "nightly@2026.09.27.232945 from yt-dlp/..." -> "2026.09.27 (nightly)"
+     */
+    public static String formatCleanVersion(String raw) {
+        if (raw == null || raw.trim().isEmpty()) return "не определена";
+        String s = raw.trim();
+        int fromIdx = s.indexOf(" from ");
+        if (fromIdx != -1) {
+            s = s.substring(0, fromIdx).trim();
+        }
+        if (s.startsWith("nightly@")) {
+            String v = s.substring("nightly@".length());
+            String[] parts = v.split("\\.");
+            if (parts.length >= 3) {
+                return parts[0] + "." + parts[1] + "." + parts[2] + " (nightly)";
+            }
+            return v + " (nightly)";
+        }
+        return s;
+    }
 
     /** Initialize runtime once. Safe to call multiple times. */
     public void init() {
@@ -85,7 +108,15 @@ public final class RuntimeManager {
                 Log.i(TAG, "Updating yt-dlp via channel: " + channel);
                 YoutubeDL.UpdateStatus updateStatus = YoutubeDL.getInstance().updateYoutubeDL(context, channel);
                 version = YoutubeDL.getInstance().version(context);
-                String msg = "Update status: " + updateStatus + ", version: " + version;
+                String cleanVer = formatCleanVersion(version);
+                String msg;
+                if (updateStatus == YoutubeDL.UpdateStatus.ALREADY_UP_TO_DATE) {
+                    msg = "yt-dlp: установлена актуальная версия (" + cleanVer + ")";
+                } else if (updateStatus == YoutubeDL.UpdateStatus.DONE) {
+                    msg = "yt-dlp успешно обновлен до " + cleanVer;
+                } else {
+                    msg = "yt-dlp: " + updateStatus + " (" + cleanVer + ")";
+                }
                 Log.i(TAG, msg);
                 result.complete(msg);
             } catch (Exception e) {

@@ -26,4 +26,18 @@ public class RuntimeManagerTest {
         assertTrue(future.isCompletedExceptionally());
         assertThrows(ExecutionException.class, future::get);
     }
+
+    @Test
+    public void formatsCleanVersionCorrectly() {
+        assertEquals("2026.09.27 (nightly)",
+                RuntimeManager.formatCleanVersion("nightly@2026.09.27.232945 from yt-dlp/yt-dlp-nightly-builds [51bab8a01] (zip)"));
+        assertEquals("2026.09.27",
+                RuntimeManager.formatCleanVersion("2026.09.27"));
+        assertEquals("2026.09.27",
+                RuntimeManager.formatCleanVersion("2026.09.27 from yt-dlp/yt-dlp"));
+        assertEquals("не определена",
+                RuntimeManager.formatCleanVersion(null));
+        assertEquals("не определена",
+                RuntimeManager.formatCleanVersion("   "));
+    }
 }

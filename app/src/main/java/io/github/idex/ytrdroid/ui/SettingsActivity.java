@@ -274,17 +274,19 @@ public class SettingsActivity extends AppCompatActivity {
             Preference ytdlp = findPreference("ytdlp_version");
             if (ytdlp != null) {
                 App app = (App) requireContext().getApplicationContext();
-                String v = app.container().runtime.getVersion();
-                ytdlp.setSummary(v != null ? v : "Нажмите для обновления");
+                String rawV = app.container().runtime.getVersion();
+                String cleanV = io.github.idex.ytrdroid.data.ytdlp.RuntimeManager.formatCleanVersion(rawV);
+                ytdlp.setSummary(rawV != null ? "Версия: " + cleanV + " · Нажмите для обновления" : "Нажмите для обновления");
 
                 ytdlp.setOnPreferenceClickListener(pref -> {
-                    pref.setSummary("Обновление...");
-                    Toast.makeText(requireContext(), "Обновление yt-dlp...", Toast.LENGTH_SHORT).show();
+                    pref.setSummary("Проверка обновлений…");
+                    Toast.makeText(requireContext(), "Проверка обновлений yt-dlp…", Toast.LENGTH_SHORT).show();
                     app.container().runtime.update(YoutubeDL.UpdateChannel._NIGHTLY)
                             .thenAccept(msg -> {
                                 if (getActivity() != null) {
                                     getActivity().runOnUiThread(() -> {
-                                        pref.setSummary(app.container().runtime.getVersion());
+                                        String updatedV = io.github.idex.ytrdroid.data.ytdlp.RuntimeManager.formatCleanVersion(app.container().runtime.getVersion());
+                                        pref.setSummary("Версия: " + updatedV + " · Нажмите для обновления");
                                         Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show();
                                     });
                                 }
@@ -292,7 +294,7 @@ public class SettingsActivity extends AppCompatActivity {
                             .exceptionally(ex -> {
                                 if (getActivity() != null) {
                                     getActivity().runOnUiThread(() -> {
-                                        pref.setSummary("Ошибка обновления");
+                                        pref.setSummary("Ошибка обновления · Нажмите для повтора");
                                         String errMsg = ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage();
                                         Toast.makeText(requireContext(), "Ошибка: " + errMsg, Toast.LENGTH_LONG).show();
                                     });
