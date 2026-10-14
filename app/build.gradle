@@ -79,6 +79,8 @@ android {
                 storePassword releaseSigningProperties.getProperty('storePassword')
                 keyAlias releaseSigningProperties.getProperty('keyAlias')
                 keyPassword releaseSigningProperties.getProperty('keyPassword')
+                v1SigningEnabled true
+                v2SigningEnabled true
             }
         }
     }

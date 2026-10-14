@@ -92,6 +92,7 @@ public class DownloadEngine {
         req.addOption("--skip-download");
         req.addOption("--no-playlist");
         req.addOption("--no-warnings");
+        req.addOption("--extractor-args", "youtube:player_client=android,web");
 
         if (context != null) {
             File cacheDir = new File(context.getCacheDir(), "ytdlp");
@@ -219,15 +220,20 @@ public class DownloadEngine {
                 req.addOption("--cookies", cookiesFile.getAbsolutePath());
             }
 
+            req.addOption("--extractor-args", "youtube:player_client=android,web");
+            req.addOption("--retries", "10");
+            req.addOption("--fragment-retries", "10");
+
             if (isAudio) {
                 req.addOption("-x");
                 req.addOption("--audio-format", "mp3");
+                req.addOption("-f", "ba/b");
             } else {
                 if (task.quality != null && !"auto".equals(task.quality)) {
-                    String fmt = "bv[height<=" + task.quality + "]+ba/b[height<=" + task.quality + "]/b";
+                    String fmt = "bv*[height<=" + task.quality + "]+ba/b[height<=" + task.quality + "]/bv*+ba/b";
                     req.addOption("-f", fmt);
                 } else {
-                    req.addOption("-f", "bv+ba/b");
+                    req.addOption("-f", "bv*+ba/b");
                 }
                 req.addOption("--merge-output-format", "mkv".equals(task.ext) ? "mkv" : "mp4");
             }

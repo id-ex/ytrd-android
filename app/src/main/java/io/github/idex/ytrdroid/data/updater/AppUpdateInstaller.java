@@ -2,6 +2,8 @@ package io.github.idex.ytrdroid.data.updater;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
@@ -14,6 +16,7 @@ import androidx.core.content.FileProvider;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -34,8 +37,10 @@ public final class AppUpdateInstaller {
     private static final ExecutorService executor = Executors.newSingleThreadExecutor();
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
     private static final OkHttpClient httpClient = new OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
             .build();
     private static volatile File pendingInstallApk;
 
@@ -43,9 +48,7 @@ public final class AppUpdateInstaller {
 
     public static void downloadAndInstall(Context context, AppUpdateChecker.UpdateInfo info, ProgressCallback callback) {
         executor.execute(() -> {
-            File destDir = context.getExternalCacheDir() != null
-                    ? new File(context.getExternalCacheDir(), "updates")
-                    : new File(context.getCacheDir(), "updates");
+            File destDir = new File(context.getCacheDir(), "updates");
 
             if (!destDir.exists()) {
                 destDir.mkdirs();
@@ -74,7 +77,7 @@ public final class AppUpdateInstaller {
                     try (InputStream in = body.byteStream();
                          FileOutputStream out = new FileOutputStream(apkFile)) {
 
-                        byte[] buffer = new byte[8192];
+                        byte[] buffer = new byte[16384];
                         long downloaded = 0;
                         int read;
                         long lastProgressUpdate = 0;
@@ -92,6 +95,11 @@ public final class AppUpdateInstaller {
                             }
                         }
                         out.flush();
+
+                        if (totalBytes > 0 && downloaded < totalBytes) {
+                            apkFile.delete();
+                            throw new java.io.IOException("Загрузка не завершена (" + downloaded + " из " + totalBytes + " байт)");
+                        }
                     }
 
                     mainHandler.post(() -> {
@@ -105,6 +113,7 @@ public final class AppUpdateInstaller {
         });
     }
 
+    @android.annotation.SuppressLint("QueryPermissionsNeeded")
     public static void installApk(Context context, File apkFile) {
         if (context == null || apkFile == null || !apkFile.exists()) return;
 
@@ -130,6 +139,12 @@ public final class AppUpdateInstaller {
                     .setDataAndType(apkUri, "application/vnd.android.package-archive")
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+            List<ResolveInfo> resolveInfoList = context.getPackageManager().queryIntentActivities(
+                    installIntent, PackageManager.MATCH_DEFAULT_ONLY);
+            for (ResolveInfo resolveInfo : resolveInfoList) {
+                context.grantUriPermission(resolveInfo.activityInfo.packageName, apkUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            }
 
             context.startActivity(installIntent);
         } catch (Exception e) {
