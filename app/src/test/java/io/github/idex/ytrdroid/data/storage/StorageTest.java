@@ -70,4 +70,32 @@ public class StorageTest {
         String longName = "a".repeat(100);
         assertEquals(60, DestinationWriter.sanitize(longName).length());
     }
+
+    @Test
+    public void cleanupTaskAndAllWorkspacesAndSize() throws IOException {
+        File filesDir = temp.newFolder("files_cleanup");
+        UUID task1 = UUID.randomUUID();
+        UUID task2 = UUID.randomUUID();
+        UUID exec = UUID.randomUUID();
+
+        WorkspaceManager wm1 = new WorkspaceManager(filesDir, task1, exec);
+        File v1 = wm1.getCompleteVideoFile();
+        try (FileWriter w = new FileWriter(v1)) { w.write("video content 12345"); }
+
+        WorkspaceManager wm2 = new WorkspaceManager(filesDir, task2, exec);
+        File v2 = wm2.getCompleteVideoFile();
+        try (FileWriter w = new FileWriter(v2)) { w.write("video content 67890"); }
+
+        assertTrue(WorkspaceManager.getWorkspacesSize(filesDir) > 0);
+
+        // Delete task1
+        WorkspaceManager.cleanupTask(filesDir, task1);
+        assertFalse(wm1.getTaskDir().exists());
+        assertTrue(wm2.getTaskDir().exists());
+
+        // Delete all
+        WorkspaceManager.cleanupAllWorkspaces(filesDir);
+        assertFalse(new File(filesDir, "work").exists());
+        assertEquals(0, WorkspaceManager.getWorkspacesSize(filesDir));
+    }
 }

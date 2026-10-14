@@ -26,6 +26,7 @@ import com.google.android.material.switchmaterial.SwitchMaterial;
 import java.util.ArrayList;
 import java.util.List;
 
+import io.github.idex.ytrdroid.App;
 import io.github.idex.ytrdroid.R;
 import io.github.idex.ytrdroid.data.ytdlp.OEmbedClient;
 import io.github.idex.ytrdroid.data.ytdlp.VideoInfoCache;
@@ -243,9 +244,10 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
         btnDownload.setVisibility(View.VISIBLE);
         txtTitle.setText(R.string.analyzing);
         txtUploader.setText("Получение информации о видео…");
+        App appInstance = (App) requireContext().getApplicationContext();
 
         // Этап 1 (Мгновенное превью oEmbed — 200 мс)
-        new Thread(() -> {
+        appInstance.container().backgroundExecutor.execute(() -> {
             OEmbedClient.PreviewInfo preview = OEmbedClient.fetch(id);
             if (preview != null && getActivity() != null) {
                 getActivity().runOnUiThread(() -> {
@@ -270,10 +272,10 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                     }
                 });
             }
-        }, "oembed-preview").start();
+        });
 
         // Параллельная быстрая проверка наличия перевода VOT (300 мс)
-        new Thread(() -> {
+        appInstance.container().backgroundExecutor.execute(() -> {
             VotClient vot = new VotClient();
             boolean isLive = spinnerVoice != null && spinnerVoice.getSelectedItemPosition() == 1;
             VotClient.TranslationResult tr = vot.checkStatus(url, 341.0, isLive, "en");
@@ -298,7 +300,7 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                     txtLangStatus.setVisibility(View.VISIBLE);
                 });
             }
-        }, "vot-status-check").start();
+        });
 
         // Этап 2: Быстрое получение форматов через NewPipeExtractor (~1 сек) с fallback на yt-dlp
         Context ctx = requireContext().getApplicationContext();
@@ -306,7 +308,7 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
         String processId = java.util.UUID.randomUUID().toString();
         analysisEngine = engine;
         analysisProcessId = processId;
-        new Thread(() -> {
+        appInstance.container().backgroundExecutor.execute(() -> {
             try {
                 VideoInfo result = null;
                 try {
@@ -351,7 +353,7 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                     analysisProcessId = null;
                 }
             }
-        }, "fetch-info").start();
+        });
     }
 
     private void cancelAnalysis() {
@@ -431,7 +433,7 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
             radioAudioMode.check("dual".equals(appInstance.container().settings.getDefaultAudioMode()) ? R.id.radio_dual : R.id.radio_mix);
 
             final int currentGen = analysisGeneration;
-            new Thread(() -> {
+            appInstance.container().backgroundExecutor.execute(() -> {
                 VotClient vot = new VotClient();
                 String lang = VotClient.normalizeLang(info.language);
                 double dur = info.duration > 0 ? info.duration : 341.0;
@@ -457,7 +459,7 @@ public class ParamsFragment extends com.google.android.material.bottomsheet.Bott
                         txtLangStatus.setVisibility(View.VISIBLE);
                     });
                 }
-            }, "vot-status-check").start();
+            });
         }
 
         int translateVis = switchTranslate.isChecked() ? View.VISIBLE : View.GONE;

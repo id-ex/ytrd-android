@@ -103,6 +103,37 @@ public final class WorkspaceManager {
         deleteRecursively(baseDir);
     }
 
+    /** Clean up workspace for a specific task. */
+    public static void cleanupTask(File filesDir, UUID taskId) {
+        if (filesDir == null || taskId == null) return;
+        deleteRecursively(new File(filesDir, "work/" + taskId));
+    }
+
+    /** Clean up all workspaces under filesDir/work/. */
+    public static void cleanupAllWorkspaces(File filesDir) {
+        if (filesDir == null) return;
+        deleteRecursively(new File(filesDir, "work"));
+    }
+
+    /** Get total size of all workspaces under filesDir/work/. */
+    public static long getWorkspacesSize(File filesDir) {
+        if (filesDir == null) return 0;
+        return calculateSize(new File(filesDir, "work"));
+    }
+
+    private static long calculateSize(File file) {
+        if (file == null || !file.exists()) return 0;
+        if (!file.isDirectory()) return file.length();
+        long size = 0;
+        File[] children = file.listFiles();
+        if (children != null) {
+            for (File child : children) {
+                size += calculateSize(child);
+            }
+        }
+        return size;
+    }
+
     private static boolean deleteRecursively(File file) {
         if (file == null || !file.exists()) return true;
         if (file.isDirectory()) {

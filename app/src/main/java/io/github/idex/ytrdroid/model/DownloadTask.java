@@ -42,7 +42,7 @@ public class DownloadTask {
 
     public String formatProgress() {
         if (progress < 0) return "0%";
-        return String.format("%.0f%%", progress);
+        return String.format(java.util.Locale.ROOT, "%.0f%%", progress);
     }
 
     public String formatSize() {
@@ -52,10 +52,10 @@ public class DownloadTask {
 
     public String formatSpeed() {
         if (speed <= 0) return "";
-        return String.format("%.1f МБ/с", speed / (1024 * 1024));
+        return String.format(java.util.Locale.ROOT, "%.1f МБ/с", speed / (1024 * 1024));
     }
 
     private String formatMB(long bytes) {
-        return String.format("%.0f", bytes / (1024.0 * 1024.0));
+        return String.format(java.util.Locale.ROOT, "%.0f", bytes / (1024.0 * 1024.0));
     }
 }

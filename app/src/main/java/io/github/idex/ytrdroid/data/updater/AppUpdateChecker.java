@@ -173,21 +173,21 @@ public final class AppUpdateChecker {
             String downloadUrl = getString(obj, "browser_download_url");
             long size = obj.has("size") && !obj.get("size").isJsonNull() ? obj.get("size").getAsLong() : 0;
 
-            if (name == null || downloadUrl == null || !name.toLowerCase().endsWith(".apk")) {
+            if (name == null || downloadUrl == null || !name.toLowerCase(java.util.Locale.ROOT).endsWith(".apk")) {
                 continue;
             }
 
             BestAsset current = new BestAsset(name, downloadUrl, size);
-            String lowerName = name.toLowerCase();
+            String lowerName = name.toLowerCase(java.util.Locale.ROOT);
 
-            if (!primaryAbi.isEmpty() && lowerName.contains(primaryAbi.toLowerCase())) {
+            if (!primaryAbi.isEmpty() && lowerName.contains(primaryAbi.toLowerCase(java.util.Locale.ROOT))) {
                 primaryAbiMatch = current;
                 break; // Highest priority match
             }
 
             if (supportedAbis != null) {
                 for (String abi : supportedAbis) {
-                    if (lowerName.contains(abi.toLowerCase())) {
+                    if (lowerName.contains(abi.toLowerCase(java.util.Locale.ROOT))) {
                         anyAbiMatch = current;
                         break;
                     }

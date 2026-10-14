@@ -37,6 +37,7 @@ public final class AppUpdateInstaller {
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .build();
+    private static volatile File pendingInstallApk;
 
     private AppUpdateInstaller() {}
 
@@ -107,16 +108,16 @@ public final class AppUpdateInstaller {
     public static void installApk(Context context, File apkFile) {
         if (context == null || apkFile == null || !apkFile.exists()) return;
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (!context.getPackageManager().canRequestPackageInstalls()) {
-                Toast.makeText(context, "Разрешите установку из этого источника для обновления", Toast.LENGTH_LONG).show();
-                Intent settingsIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
-                        .setData(Uri.parse("package:" + context.getPackageName()))
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                context.startActivity(settingsIntent);
-                return;
-            }
+        if (!context.getPackageManager().canRequestPackageInstalls()) {
+            pendingInstallApk = apkFile;
+            Toast.makeText(context, "Разрешите установку из этого источника для обновления", Toast.LENGTH_LONG).show();
+            Intent settingsIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                    .setData(Uri.parse("package:" + context.getPackageName()))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(settingsIntent);
+            return;
         }
+        pendingInstallApk = null;
 
         try {
             Uri apkUri = FileProvider.getUriForFile(
@@ -133,6 +134,17 @@ public final class AppUpdateInstaller {
             context.startActivity(installIntent);
         } catch (Exception e) {
             Toast.makeText(context, "Ошибка запуска установки: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    public static void resumePendingInstall(Context context) {
+        if (context == null) return;
+        File pending = pendingInstallApk;
+        if (pending != null && pending.exists()) {
+            if (context.getPackageManager().canRequestPackageInstalls()) {
+                pendingInstallApk = null;
+                installApk(context, pending);
+            }
         }
     }
 

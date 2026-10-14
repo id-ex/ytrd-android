@@ -3,6 +3,7 @@ package io.github.idex.ytrdroid.application;
 import org.junit.Test;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Queue;
 import java.util.UUID;
@@ -48,7 +49,7 @@ public class DownloadCoordinatorTest {
         return new DownloadRequest(UUID.randomUUID(), "abcdefghijk", "Video", null, 720,
                 DownloadRequest.ResultType.VIDEO, DownloadRequest.Container.MP4, false,
                 DownloadRequest.Voice.STANDARD, DownloadRequest.AudioMode.ORIGINAL,
-                DownloadRequest.Subtitles.NONE, null, 0, null);
+                DownloadRequest.Subtitles.NONE, null, 120.0, "en");
     }
     static TaskSnapshot snapshot(DownloadRequest request, UUID execution, TaskSnapshot.State state) {
         return new TaskSnapshot(request, execution, state, 10, 1, 10, 1,
@@ -78,6 +79,15 @@ public class DownloadCoordinatorTest {
         };
         finish();
         assertEquals(DONE, task(early).state);
+    }
+
+    @Test public void earlyRequestWithPreviewTitleStartsAnalyzing() {
+        DownloadRequest early = new DownloadRequest(UUID.randomUUID(), "abcdefghijk", "Preview Title", null, 720,
+                DownloadRequest.ResultType.VIDEO, DownloadRequest.Container.MP4, false,
+                DownloadRequest.Voice.STANDARD, DownloadRequest.AudioMode.ORIGINAL,
+                DownloadRequest.Subtitles.NONE, null, 0, null);
+        enqueue(early);
+        assertEquals(ANALYZING, task(early).state);
     }
 
     @Test public void pauseDuringAnalyzingWaitsForWorkerBeforeStartingNext() {
@@ -315,6 +325,55 @@ public class DownloadCoordinatorTest {
         assertEquals(CANCELLING, task(a).state);
         finish();
         assertEquals(CANCELLED, task(a).state);
+        assertTrue(workers.pending.isEmpty());
+    }
+
+    @Test public void removeActiveTaskDeletesUponWorkerFinishAndNotifies() {
+        List<UUID> removedTasks = new ArrayList<>();
+        DownloadCoordinator c = new DownloadCoordinator(serial, workers,
+                (request, execution, cancellation, progress) -> snapshot(request, execution, DONE),
+                snapshots -> latest = snapshots,
+                removedTasks::add);
+        DownloadRequest a = request();
+        c.enqueue(a);
+        serial.drain();
+        assertEquals(DOWNLOADING, task(a).state);
+
+        c.remove(a.id);
+        serial.drain();
+        assertEquals(CANCELLING, task(a).state);
+
+        workers.next();
+        serial.drain();
+        assertFalse(latest.stream().anyMatch(s -> s.request.id.equals(a.id)));
+        assertEquals(Collections.singletonList(a.id), removedTasks);
+    }
+
+    @Test public void removeNonActiveTaskImmediatelyRemovesAndNotifies() {
+        List<UUID> removedTasks = new ArrayList<>();
+        DownloadCoordinator c = new DownloadCoordinator(serial, workers,
+                (request, execution, cancellation, progress) -> snapshot(request, execution, DONE),
+                snapshots -> latest = snapshots,
+                removedTasks::add);
+        DownloadRequest a = request(), b = request();
+        c.enqueue(a);
+        c.enqueue(b);
+        serial.drain();
+        assertEquals(QUEUED, task(b).state);
+
+        c.remove(b.id);
+        serial.drain();
+        assertFalse(latest.stream().anyMatch(s -> s.request.id.equals(b.id)));
+        assertEquals(Collections.singletonList(b.id), removedTasks);
+    }
+
+    @Test public void restorePopulatesInterruptedTasksWithoutAdvancing() {
+        DownloadRequest a = request();
+        TaskSnapshot interrupted = new TaskSnapshot(a, null, INTERRUPTED, 0, 0, 0, 0,
+                "Прервано", null, null);
+        coordinator.restore(Collections.singletonList(interrupted));
+        serial.drain();
+        assertEquals(INTERRUPTED, task(a).state);
         assertTrue(workers.pending.isEmpty());
     }
 }

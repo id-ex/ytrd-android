@@ -22,9 +22,11 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 import io.github.idex.ytrdroid.App;
 import io.github.idex.ytrdroid.R;
+import io.github.idex.ytrdroid.domain.model.DownloadRequest;
 import io.github.idex.ytrdroid.domain.model.TaskSnapshot;
 import io.github.idex.ytrdroid.model.DownloadTask;
 import io.github.idex.ytrdroid.model.LegacyTaskMapper;
@@ -33,6 +35,7 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 
+@android.annotation.SuppressLint({"SetTextI18n", "NotifyDataSetChanged"})
 public class DownloadsFragment extends Fragment {
     private final java.util.function.Consumer<List<TaskSnapshot>> snapshotObserver = snapshots -> {
         if (getActivity() != null) {
@@ -134,7 +137,7 @@ public class DownloadsFragment extends Fragment {
                 active = t;
             } else if (t.state == DownloadTask.State.QUEUED || t.state == DownloadTask.State.PAUSED) {
                 queued.add(t);
-            } else if (t.state == DownloadTask.State.ERROR) {
+            } else if (t.state == DownloadTask.State.ERROR || t.state == DownloadTask.State.INTERRUPTED) {
                 errors.add(t);
             }
         }
@@ -293,7 +296,10 @@ public class DownloadsFragment extends Fragment {
     private void showErrorCardMenu(View anchor, DownloadTask task) {
         PopupMenu popup = new PopupMenu(requireContext(), anchor);
         popup.getMenu().add(0, 1, 0, "Повторить загрузку");
-        popup.getMenu().add(0, 2, 1, "Удалить");
+        if (task.translate) {
+            popup.getMenu().add(0, 3, 1, "Скачать оригинал (без перевода)");
+        }
+        popup.getMenu().add(0, 2, 2, "Удалить");
 
         popup.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == 1) {
@@ -302,6 +308,32 @@ public class DownloadsFragment extends Fragment {
                         ctx, new Intent(ctx, DownloadService.class));
                 App app = (App) ctx.getApplicationContext();
                 app.container().downloads.retry(task.getRequest().id);
+                return true;
+            } else if (item.getItemId() == 3) {
+                Context ctx = requireContext();
+                App app = (App) ctx.getApplicationContext();
+                app.container().downloads.remove(task.getRequest().id);
+                DownloadRequest oldReq = task.getRequest();
+                DownloadRequest noTranslateReq = new DownloadRequest(
+                        UUID.randomUUID(),
+                        oldReq.videoId,
+                        oldReq.title,
+                        oldReq.thumbnail,
+                        oldReq.height,
+                        oldReq.resultType,
+                        oldReq.container,
+                        false,
+                        DownloadRequest.Voice.STANDARD,
+                        DownloadRequest.AudioMode.ORIGINAL,
+                        oldReq.subtitles,
+                        oldReq.destination,
+                        oldReq.duration,
+                        oldReq.language
+                );
+                androidx.core.content.ContextCompat.startForegroundService(
+                        ctx, new Intent(ctx, DownloadService.class));
+                app.container().downloads.setExecutionEnabled(true);
+                app.container().downloads.enqueue(noTranslateReq);
                 return true;
             } else if (item.getItemId() == 2) {
                 App app = (App) requireContext().getApplicationContext();

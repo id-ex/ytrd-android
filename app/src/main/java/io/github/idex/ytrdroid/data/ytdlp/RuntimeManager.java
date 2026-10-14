@@ -89,6 +89,25 @@ public final class RuntimeManager {
         });
     }
 
+    /** Ensures runtime is initialized, waiting if initialization is in progress. */
+    public void ensureReady() throws Exception {
+        if (status == Status.READY) return;
+        if (status == Status.UNINITIALIZED) {
+            init();
+        }
+        if (status == Status.FAILED) {
+            throw new YoutubeDLException(initError != null ? initError : "Runtime initialization failed");
+        }
+        try {
+            Boolean success = readyFuture.get(30, java.util.concurrent.TimeUnit.SECONDS);
+            if (success == null || !success || status != Status.READY) {
+                throw new YoutubeDLException(initError != null ? initError : "Runtime initialization failed");
+            }
+        } catch (java.util.concurrent.TimeoutException te) {
+            throw new YoutubeDLException("Runtime initialization timed out");
+        }
+    }
+
     /**
      * Explicit update. Single-flight, returns future with result status.
      * Fails if runtime is not ready or another update is already in progress.

@@ -25,6 +25,7 @@ import java.io.InputStream;
 
 import io.github.idex.ytrdroid.App;
 import io.github.idex.ytrdroid.R;
+import io.github.idex.ytrdroid.data.storage.WorkspaceManager;
 import io.github.idex.ytrdroid.data.updater.AppUpdateChecker;
 import io.github.idex.ytrdroid.util.CookieNetscapeWriter;
 
@@ -44,6 +45,12 @@ public class SettingsActivity extends AppCompatActivity {
                     .replace(R.id.settings_container, new SettingsFragment())
                     .commit();
         }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        io.github.idex.ytrdroid.data.updater.AppUpdateInstaller.resumePendingInstall(this);
     }
 
     public static class SettingsFragment extends PreferenceFragmentCompat {
@@ -142,15 +149,25 @@ public class SettingsActivity extends AppCompatActivity {
 
         private void updateCacheSummary() {
             Preference clearCache = findPreference("clear_cache");
-            if (clearCache != null) {
-                long size = getDirectorySize(requireContext().getCacheDir());
-                if (size <= 0) {
-                    clearCache.setSummary("Кэш пуст (0 Б)");
-                } else {
-                    String formatted = Formatter.formatFileSize(requireContext(), size);
-                    clearCache.setSummary("Занято: " + formatted + " · Нажмите для очистки");
+            if (clearCache == null || getContext() == null) return;
+            android.content.Context ctx = requireContext().getApplicationContext();
+            App app = (App) ctx;
+            app.container().backgroundExecutor.execute(() -> {
+                long cacheSize = getDirectorySize(ctx.getCacheDir());
+                long workSize = WorkspaceManager.getWorkspacesSize(ctx.getFilesDir());
+                long totalSize = cacheSize + workSize;
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        if (!isAdded()) return;
+                        if (totalSize <= 0) {
+                            clearCache.setSummary("Кэш пуст (0 Б)");
+                        } else {
+                            String formatted = Formatter.formatFileSize(ctx, totalSize);
+                            clearCache.setSummary("Занято: " + formatted + " · Нажмите для очистки");
+                        }
+                    });
                 }
-            }
+            });
         }
 
         private long getDirectorySize(File dir) {
@@ -310,17 +327,30 @@ public class SettingsActivity extends AppCompatActivity {
             Preference clearCache = findPreference("clear_cache");
             if (clearCache != null) {
                 clearCache.setOnPreferenceClickListener(pref -> {
-                    File cacheDir = requireContext().getCacheDir();
-                    if (cacheDir != null && cacheDir.isDirectory()) {
-                        File[] files = cacheDir.listFiles();
-                        if (files != null) {
-                            for (File f : files) {
-                                deleteRecursively(f);
+                    android.content.Context ctx = requireContext().getApplicationContext();
+                    App app = (App) ctx;
+                    pref.setEnabled(false);
+                    pref.setSummary("Очистка…");
+                    app.container().backgroundExecutor.execute(() -> {
+                        File cacheDir = ctx.getCacheDir();
+                        if (cacheDir != null && cacheDir.isDirectory()) {
+                            File[] files = cacheDir.listFiles();
+                            if (files != null) {
+                                for (File f : files) {
+                                    deleteRecursively(f);
+                                }
                             }
                         }
-                    }
-                    pref.setSummary("Кэш очищен (0 Б)");
-                    Toast.makeText(requireContext(), "Кэш очищен", Toast.LENGTH_SHORT).show();
+                        WorkspaceManager.cleanupAllWorkspaces(ctx.getFilesDir());
+                        if (getActivity() != null) {
+                            getActivity().runOnUiThread(() -> {
+                                if (!isAdded()) return;
+                                pref.setEnabled(true);
+                                pref.setSummary("Кэш очищен (0 Б)");
+                                Toast.makeText(ctx, "Кэш очищен", Toast.LENGTH_SHORT).show();
+                            });
+                        }
+                    });
                     return true;
                 });
             }

@@ -457,6 +457,7 @@ public class SlideRightItemAnimator extends SimpleItemAnimator {
         dispatchFinishedWhenDone();
     }
 
+    @android.annotation.SuppressLint("Recycle")
     private void resetAnimation(RecyclerView.ViewHolder holder) {
         if (sDefaultInterpolator == null) {
             sDefaultInterpolator = new ValueAnimator().getInterpolator();

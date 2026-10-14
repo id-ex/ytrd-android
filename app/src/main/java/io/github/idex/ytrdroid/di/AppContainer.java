@@ -8,6 +8,7 @@ import java.io.File;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -20,6 +21,7 @@ import io.github.idex.ytrdroid.data.persistence.ArtifactRepository;
 import io.github.idex.ytrdroid.data.persistence.LegacyHistoryMigrator;
 import io.github.idex.ytrdroid.data.persistence.TaskRepository;
 import io.github.idex.ytrdroid.data.settings.SettingsRepository;
+import io.github.idex.ytrdroid.data.storage.WorkspaceManager;
 import io.github.idex.ytrdroid.data.ytdlp.RuntimeManager;
 import io.github.idex.ytrdroid.domain.model.TaskSnapshot;
 import io.github.idex.ytrdroid.engine.LegacyDownloadPipeline;
@@ -33,6 +35,7 @@ public final class AppContainer {
     public final TaskRepository tasks;
     public final SettingsRepository settings;
     public final NetworkPolicy network;
+    public final ExecutorService backgroundExecutor;
     private final List<Consumer<List<TaskSnapshot>>> observers = new java.util.concurrent.CopyOnWriteArrayList<>();
     private List<TaskSnapshot> latest = Collections.emptyList();
 
@@ -40,6 +43,7 @@ public final class AppContainer {
         Handler main = new Handler(Looper.getMainLooper());
         ThreadPoolExecutor workers = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
                 new ArrayBlockingQueue<>(1), runnable -> new Thread(runnable, "download-worker"));
+        backgroundExecutor = Executors.newFixedThreadPool(4, runnable -> new Thread(runnable, "ytrd-bg"));
         runtime = new RuntimeManager(context);
         settings = new SettingsRepository(context);
         network = new NetworkPolicy(context);
@@ -47,15 +51,6 @@ public final class AppContainer {
         database = AppDatabase.getInstance(context);
         artifacts = new ArtifactRepository(database.artifactDao());
         tasks = new TaskRepository(database.taskDao());
-
-        // Startup recovery: mark any unfinished tasks from previous process as INTERRUPTED
-        tasks.markActiveAsInterrupted(null);
-
-        // One-time idempotent legacy history migration in background
-        Executors.newSingleThreadExecutor(r -> new Thread(r, "history-migration")).execute(() -> {
-            File legacyHistory = new File(context.getFilesDir(), "history.json");
-            new LegacyHistoryMigrator().migrate(legacyHistory, database.artifactDao());
-        });
 
         downloads = new DownloadCoordinator(command -> main.post(command), workers,
                 new LegacyDownloadPipeline(context, settings, network), snapshots -> {
@@ -67,7 +62,26 @@ public final class AppContainer {
                     for (Consumer<List<TaskSnapshot>> obs : observers) {
                         obs.accept(snapshots);
                     }
+                }, taskId -> {
+                    tasks.delete(taskId, null);
+                    WorkspaceManager.cleanupTask(context.getFilesDir(), taskId);
                 });
+
+        // Startup recovery: mark any unfinished tasks from previous process as INTERRUPTED,
+        // then restore them into DownloadCoordinator.
+        tasks.markActiveAsInterrupted(() -> {
+            tasks.getAllSnapshots(restored -> {
+                if (restored != null && !restored.isEmpty()) {
+                    downloads.restore(restored);
+                }
+            });
+        });
+
+        // One-time idempotent legacy history migration in background
+        backgroundExecutor.execute(() -> {
+            File legacyHistory = new File(context.getFilesDir(), "history.json");
+            new LegacyHistoryMigrator().migrate(legacyHistory, database.artifactDao());
+        });
     }
 
     /** Thread-safe observer registration; immediately notifies with latest snapshots. */

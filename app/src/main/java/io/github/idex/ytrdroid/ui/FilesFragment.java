@@ -45,6 +45,7 @@ import io.github.idex.ytrdroid.App;
 import io.github.idex.ytrdroid.R;
 import io.github.idex.ytrdroid.data.persistence.ArtifactEntity;
 
+@android.annotation.SuppressLint({"SetTextI18n", "NotifyDataSetChanged"})
 public class FilesFragment extends Fragment {
     private static final String KEY_SELECTED_IDS = "selected_ids";
 
@@ -429,7 +430,7 @@ public class FilesFragment extends Fragment {
         }
         exitSelectionMode(false);
 
-        new Thread(() -> {
+        app.container().backgroundExecutor.execute(() -> {
             if (deletePhysicalFiles) {
                 for (ArtifactEntity item : items) {
                     try {
@@ -464,7 +465,7 @@ public class FilesFragment extends Fragment {
                     }
                 });
             }
-        }, "batch-delete").start();
+        });
     }
 
     // ── Adapter ──

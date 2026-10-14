@@ -32,6 +32,12 @@ import okhttp3.Response;
 public class DownloadEngine {
     private static final String TAG = "DownloadEngine";
     private final VotClient vot = new VotClient();
+    private static final OkHttpClient SHARED_HTTP = new OkHttpClient.Builder()
+            .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            .dns(io.github.idex.ytrdroid.data.network.SafeDns.INSTANCE)
+            .build();
+
     private volatile boolean cancelled;
     private volatile Thread currentThread;
 
@@ -67,7 +73,20 @@ public class DownloadEngine {
         }
     }
 
+    private void ensureRuntime(Context context) throws Exception {
+        if (context != null) {
+            Context appCtx = context.getApplicationContext();
+            if (appCtx instanceof io.github.idex.ytrdroid.App) {
+                ((io.github.idex.ytrdroid.App) appCtx).container().runtime.ensureReady();
+            } else {
+                com.yausername.youtubedl_android.YoutubeDL.getInstance().init(context);
+                com.yausername.ffmpeg.FFmpeg.getInstance().init(context);
+            }
+        }
+    }
+
     private VideoInfo doFetchInfo(Context context, String url, String processId) throws Exception {
+        ensureRuntime(context);
         YoutubeDLRequest req = new YoutubeDLRequest(url);
         req.addOption("--dump-json");
         req.addOption("--skip-download");
@@ -188,10 +207,11 @@ public class DownloadEngine {
 
                 saveToHistory(context, task);
                 if (listener != null) listener.onStateChanged(task);
-                workspace.cleanupExecution();
+                workspace.cleanupTask();
                 return;
             }
 
+            ensureRuntime(context);
             YoutubeDLRequest req = new YoutubeDLRequest(task.url);
 
             File cookiesFile = new File(context.getFilesDir(), "cookies.txt");
@@ -335,7 +355,13 @@ public class DownloadEngine {
                     throw new Exception("FFmpeg failed with exit code " + exitCode);
                 }
 
-                workspace.cleanupExecution();
+                // Delete intermediate inputs to free up disk space immediately
+                new File(workspace.getTaskDir(), "temp_video.mp4").delete();
+                new File(workspace.getTaskDir(), "temp_video.part").delete();
+                new File(workspace.getTaskDir(), "temp_video.mkv").delete();
+                new File(workspace.getTaskDir(), "vot_audio.mp3").delete();
+                new File(workspace.getTaskDir(), "vot_audio.part").delete();
+
                 task.outputPath = finalFile.getAbsolutePath();
             } else {
                 // Audio extraction produces an mp3, not the original mp4 template.
@@ -361,7 +387,7 @@ public class DownloadEngine {
                 File finalFile = io.github.idex.ytrdroid.data.storage.DestinationWriter.resolveUniqueFile(
                         outDir, baseName, isAudio ? "mp3" : (task.ext != null ? task.ext : "mp4"));
                 io.github.idex.ytrdroid.data.storage.DestinationWriter.copyAndVerify(tempVideo, finalFile);
-                workspace.cleanupExecution();
+                if (tempVideo.exists()) tempVideo.delete();
                 task.outputPath = finalFile.getAbsolutePath();
             }
 
@@ -379,6 +405,7 @@ public class DownloadEngine {
             task.stageText = "Готово";
             saveToHistory(context, task);
             if (listener != null) listener.onStateChanged(task);
+            workspace.cleanupTask();
 
         } catch (Exception e) {
             if (cancelled || e instanceof java.util.concurrent.CancellationException) {
@@ -436,8 +463,8 @@ public class DownloadEngine {
         if (files == null) return null;
         File ruSub = null, anySub = null;
         for (File f : files) {
-            String name = f.getName().toLowerCase();
-            if (name.startsWith(prefix.toLowerCase()) && (name.endsWith(".vtt") || name.endsWith(".srt"))) {
+            String name = f.getName().toLowerCase(java.util.Locale.ROOT);
+            if (name.startsWith(prefix.toLowerCase(java.util.Locale.ROOT)) && (name.endsWith(".vtt") || name.endsWith(".srt"))) {
                 if (name.contains(".ru.")) return f;
                 anySub = f;
             }
@@ -474,7 +501,7 @@ public class DownloadEngine {
         if (s == null || s.isEmpty()) return 0;
         try {
             double num = Double.parseDouble(s.replaceAll("[^0-9.]", ""));
-            String upper = s.toUpperCase();
+            String upper = s.toUpperCase(java.util.Locale.ROOT);
             if (upper.contains("GIB") || upper.contains("GB")) return (long) (num * 1024 * 1024 * 1024);
             if (upper.contains("MIB") || upper.contains("MB")) return (long) (num * 1024 * 1024);
             if (upper.contains("KIB") || upper.contains("KB")) return (long) (num * 1024);
@@ -545,7 +572,7 @@ public class DownloadEngine {
     // ── helpers ──
 
     private void downloadFileWithProgress(String url, File dest, DownloadTask task, Listener listener) throws Exception {
-        OkHttpClient http = new OkHttpClient();
+        OkHttpClient http = SHARED_HTTP;
         File parent = dest.getParentFile();
         if (parent != null && !parent.exists()) parent.mkdirs();
         File partFile = new File(parent, dest.getName() + ".part");
@@ -616,7 +643,7 @@ public class DownloadEngine {
     }
 
     private void downloadFile(String url, File dest) throws Exception {
-        OkHttpClient http = new OkHttpClient();
+        OkHttpClient http = SHARED_HTTP;
         Request req = new Request.Builder().url(url).build();
         checkCancelled();
         currentHttpCall = http.newCall(req);

@@ -1,11 +1,8 @@
 package io.github.idex.ytrdroid.ui;
 
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.ServiceConnection;
 import android.os.Bundle;
-import android.os.IBinder;
 import android.view.View;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -24,8 +21,6 @@ public class MainActivity extends AppCompatActivity {
     public static final String SCREEN_DOWNLOADS = "downloads";
     public static final String SCREEN_FILES = "files";
 
-    private DownloadService downloadService;
-    private boolean bound;
     private String pendingUrl;
     private FloatingActionButton fabAdd;
     private FloatingActionButton fabSelectAll;
@@ -34,20 +29,6 @@ public class MainActivity extends AppCompatActivity {
     private Runnable currentSelectAllAction;
     private Runnable currentClearSelectionAction;
     private boolean isFabInSelectionMode = false;
-
-    private final ServiceConnection connection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName c, IBinder b) {
-            downloadService = ((DownloadService.LocalBinder) b).getService();
-            bound = true;
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName c) {
-            bound = false;
-            downloadService = null;
-        }
-    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -125,10 +106,12 @@ public class MainActivity extends AppCompatActivity {
                 public void onError(Throwable error) {}
             });
         }
+    }
 
-        // Bind to download service
-        Intent si = new Intent(this, DownloadService.class);
-        bindService(si, connection, Context.BIND_AUTO_CREATE);
+    @Override
+    protected void onResume() {
+        super.onResume();
+        io.github.idex.ytrdroid.data.updater.AppUpdateInstaller.resumePendingInstall(this);
     }
 
     @Override
@@ -140,7 +123,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (bound) unbindService(connection);
     }
 
     public void setSelectionModeActive(boolean active,
@@ -253,8 +235,6 @@ public class MainActivity extends AppCompatActivity {
                 .addToBackStack(null)
                 .commit();
     }
-
-    public DownloadService getDownloadService() { return downloadService; }
 
     private void handleIncomingIntent(Intent intent) {
         if (intent == null) return;

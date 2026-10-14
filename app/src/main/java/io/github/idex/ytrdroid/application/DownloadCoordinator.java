@@ -2,9 +2,11 @@ package io.github.idex.ytrdroid.application;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
@@ -27,7 +29,9 @@ public final class DownloadCoordinator {
     private final Executor workers;
     private final Pipeline pipeline;
     private final Consumer<List<TaskSnapshot>> listener;
+    private final Consumer<UUID> onTaskRemoved;
     private final Map<UUID, TaskSnapshot> tasks = new LinkedHashMap<>();
+    private final Set<UUID> pendingRemovals = new HashSet<>();
     private Execution active;
     private boolean closed;
     private boolean executionEnabled = true;
@@ -70,10 +74,17 @@ public final class DownloadCoordinator {
 
     public DownloadCoordinator(Executor serial, Executor workers, Pipeline pipeline,
                                Consumer<List<TaskSnapshot>> listener) {
+        this(serial, workers, pipeline, listener, null);
+    }
+
+    public DownloadCoordinator(Executor serial, Executor workers, Pipeline pipeline,
+                               Consumer<List<TaskSnapshot>> listener,
+                               Consumer<UUID> onTaskRemoved) {
         this.serial = serial;
         this.workers = workers;
         this.pipeline = pipeline;
         this.listener = listener;
+        this.onTaskRemoved = onTaskRemoved;
     }
 
     /** Runs after all commands submitted earlier to the FIFO serial executor have published. */
@@ -129,11 +140,26 @@ public final class DownloadCoordinator {
     public void remove(UUID taskId) {
         serial.execute(() -> {
             if (active != null && active.taskId.equals(taskId)) {
-                // Active removal is cancellation; retain identity until acknowledgement.
+                // Active removal is cancellation; mark for removal upon acknowledgement.
+                pendingRemovals.add(taskId);
                 cancel(taskId);
                 return;
             }
             tasks.remove(taskId);
+            notifyRemoved(taskId);
+            publish();
+        });
+    }
+
+    public void restore(List<TaskSnapshot> snapshots) {
+        if (snapshots == null || snapshots.isEmpty()) return;
+        serial.execute(() -> {
+            if (closed) return;
+            for (TaskSnapshot s : snapshots) {
+                if (s != null && !tasks.containsKey(s.request.id)) {
+                    tasks.put(s.request.id, s);
+                }
+            }
             publish();
         });
     }
@@ -156,7 +182,7 @@ public final class DownloadCoordinator {
                 Execution execution = new Execution(task.request.id);
                 active = execution;
                 TaskSnapshot starting = new TaskSnapshot(task.request, execution.id,
-                        task.request.title == null && task.request.duration <= 0 ? ANALYZING
+                        task.request.duration <= 0 ? ANALYZING
                                 : (task.request.translate ? TRANSLATING : DOWNLOADING),
                         -1, 0, 0, 0, "Подготовка…", null, null);
                 tasks.put(task.request.id, starting);
@@ -206,7 +232,10 @@ public final class DownloadCoordinator {
     private void finish(Execution execution, TaskSnapshot result) {
         if (!owns(execution)) return;
         TaskSnapshot old = tasks.get(execution.taskId);
-        if (old.state == PAUSING) tasks.put(execution.taskId, state(old, PAUSED, "На паузе"));
+        if (pendingRemovals.remove(execution.taskId)) {
+            tasks.remove(execution.taskId);
+            notifyRemoved(execution.taskId);
+        } else if (old.state == PAUSING) tasks.put(execution.taskId, state(old, PAUSED, "На паузе"));
         else if (old.state == CANCELLING) tasks.put(execution.taskId, state(old, CANCELLED, "Отменено"));
         else if (!execution.id.equals(result.executionId) || !execution.taskId.equals(result.request.id)) {
             tasks.put(execution.taskId, failed(old, new IllegalStateException("Wrong execution result")));
@@ -219,6 +248,12 @@ public final class DownloadCoordinator {
         } else tasks.put(execution.taskId, result);
         active = null;
         advance();
+    }
+
+    private void notifyRemoved(UUID taskId) {
+        if (onTaskRemoved != null && taskId != null) {
+            onTaskRemoved.accept(taskId);
+        }
     }
 
     private boolean owns(Execution execution) { return active == execution; }

@@ -72,7 +72,7 @@ public final class UrlUtil {
         long h = seconds / 3600;
         long m = (seconds % 3600) / 60;
         long s = seconds % 60;
-        if (h > 0) return String.format("%d:%02d:%02d", h, m, s);
-        return String.format("%d:%02d", m, s);
+        if (h > 0) return String.format(java.util.Locale.ROOT, "%d:%02d:%02d", h, m, s);
+        return String.format(java.util.Locale.ROOT, "%d:%02d", m, s);
     }
 }

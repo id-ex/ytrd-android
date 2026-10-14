@@ -24,6 +24,7 @@ public final class AppUpdateDialog {
 
     private AppUpdateDialog() {}
 
+    @android.annotation.SuppressLint({"InflateParams", "SetTextI18n"})
     public static void show(Activity activity, AppUpdateChecker.UpdateInfo info) {
         if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
 
@@ -84,11 +85,11 @@ public final class AppUpdateDialog {
                     if (activity.isFinishing() || activity.isDestroyed()) return;
                     progressBar.setProgress(percent);
                     String text = totalBytes > 0
-                            ? String.format("Скачивание: %d%% (%s / %s)",
+                            ? String.format(java.util.Locale.getDefault(), "Скачивание: %d%% (%s / %s)",
                             percent,
                             Formatter.formatFileSize(activity, downloadedBytes),
                             Formatter.formatFileSize(activity, totalBytes))
-                            : String.format("Скачивание: %s", Formatter.formatFileSize(activity, downloadedBytes));
+                            : String.format(java.util.Locale.getDefault(), "Скачивание: %s", Formatter.formatFileSize(activity, downloadedBytes));
                     txtProgress.setText(text);
                 }
 

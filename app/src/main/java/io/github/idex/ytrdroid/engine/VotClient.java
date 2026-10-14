@@ -30,7 +30,7 @@ public class VotClient {
     private static final byte[] HMAC_KEY = io.github.idex.ytrdroid.BuildConfig.VOT_HMAC_KEY.getBytes(StandardCharsets.UTF_8);
     private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
     private static final String[] SUPPORTED_LANGS = {"en", "zh", "ko", "ar", "fr", "it", "es", "de", "ja"};
-    private static final int MAX_ATTEMPTS = 30;
+    private static final int MAX_ATTEMPTS = 45;
     private static final int RETRY_SLEEP_MS = 7000;
 
     private final OkHttpClient client;
@@ -47,6 +47,7 @@ public class VotClient {
         client = new OkHttpClient.Builder()
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(15, TimeUnit.SECONDS)
+                .dns(io.github.idex.ytrdroid.data.network.SafeDns.INSTANCE)
                 .build();
     }
 
@@ -65,7 +66,7 @@ public class VotClient {
 
     public static String normalizeLang(String lang) {
         if (lang == null || lang.isEmpty()) return "en";
-        String l = lang.toLowerCase();
+        String l = lang.toLowerCase(java.util.Locale.ROOT);
         for (String s : SUPPORTED_LANGS) {
             if (l.startsWith(s)) return s;
         }
@@ -136,7 +137,7 @@ public class VotClient {
         TranslationResult timeout = new TranslationResult();
         timeout.success = false;
         timeout.status = "Error";
-        timeout.message = "Timeout";
+        timeout.message = "Перевод ещё генерируется Яндексом. Попробуйте повторить через 1–2 минуты.";
         return timeout;
     }
 

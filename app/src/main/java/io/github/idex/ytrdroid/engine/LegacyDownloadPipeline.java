@@ -82,7 +82,7 @@ public final class LegacyDownloadPipeline implements DownloadCoordinator.Pipelin
         DownloadTask workerTask = LegacyTaskMapper.fromRequest(request, legacyId);
         workerTask.executionId = executionId;
 
-        if (request.title == null && request.duration <= 0) {
+        if (request.duration <= 0) {
             DownloadTask analysisTask = workerTask;
             token.onCancel(() -> engine.cancel(analysisTask));
             token.throwIfCancelled();
@@ -105,8 +105,11 @@ public final class LegacyDownloadPipeline implements DownloadCoordinator.Pipelin
                     : DownloadRequest.Container.MP4;
             DownloadRequest.AudioMode mode = translate ? request.audioMode : DownloadRequest.AudioMode.ORIGINAL;
             DownloadRequest.Voice voice = translate ? request.voice : DownloadRequest.Voice.STANDARD;
+            String title = info.title != null ? info.title
+                    : (request.title != null ? request.title : "Видео " + request.videoId);
+            String thumbnail = info.thumbnail != null ? info.thumbnail : request.thumbnail;
             resolved = new DownloadRequest(request.id, request.videoId,
-                    info.title != null ? info.title : "Видео " + request.videoId, info.thumbnail,
+                    title, thumbnail,
                     height, request.resultType, container, translate, voice, mode,
                     audio ? DownloadRequest.Subtitles.NONE : request.subtitles, request.destination,
                     info.duration > 0 ? info.duration : 341.0, info.language);

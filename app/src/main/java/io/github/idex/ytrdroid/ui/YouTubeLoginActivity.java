@@ -59,7 +59,7 @@ public class YouTubeLoginActivity extends AppCompatActivity {
     private ProgressBar progressBar;
     private boolean loginSaved = false;
 
-    @SuppressLint("SetJavaScriptEnabled")
+    @SuppressLint({"SetJavaScriptEnabled", "RestrictedApi"})
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);

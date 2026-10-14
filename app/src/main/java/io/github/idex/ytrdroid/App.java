@@ -34,20 +34,20 @@ public class App extends Application {
     }
 
     private void createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel ch = new NotificationChannel(
-                    CHANNEL_DOWNLOADS,
-                    getString(R.string.download_notification_channel),
-                    NotificationManager.IMPORTANCE_LOW);
-            ch.setDescription("Прогресс загрузок");
+        NotificationChannel ch = new NotificationChannel(
+                CHANNEL_DOWNLOADS,
+                getString(R.string.download_notification_channel),
+                NotificationManager.IMPORTANCE_LOW);
+        ch.setDescription("Прогресс загрузок");
 
-            NotificationChannel resultsChannel = new NotificationChannel(
-                    CHANNEL_RESULTS,
-                    getString(R.string.download_results_notification_channel),
-                    NotificationManager.IMPORTANCE_DEFAULT);
-            resultsChannel.setDescription("Результаты загрузок и ошибки");
+        NotificationChannel resultsChannel = new NotificationChannel(
+                CHANNEL_RESULTS,
+                getString(R.string.download_results_notification_channel),
+                NotificationManager.IMPORTANCE_DEFAULT);
+        resultsChannel.setDescription("Результаты загрузок и ошибки");
 
-            NotificationManager notificationManager = getSystemService(NotificationManager.class);
+        NotificationManager notificationManager = getSystemService(NotificationManager.class);
+        if (notificationManager != null) {
             notificationManager.createNotificationChannel(ch);
             notificationManager.createNotificationChannel(resultsChannel);
         }

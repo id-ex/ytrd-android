@@ -67,6 +67,7 @@ android {
 
     packaging {
         jniLibs {
+            useLegacyPackaging true
             excludes += ['**/x86/**', '**/x86_64/**']
         }
     }
