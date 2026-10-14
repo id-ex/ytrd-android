@@ -32,9 +32,16 @@ public final class AppUpdateChecker {
         public final String downloadUrl;
         public final String apkName;
         public final long apkSize;
+        public final String releaseUrl;
 
         public UpdateInfo(String currentVersion, String newVersion, String releaseTitle,
                           String changelog, String downloadUrl, String apkName, long apkSize) {
+            this(currentVersion, newVersion, releaseTitle, changelog, downloadUrl, apkName, apkSize, null);
+        }
+
+        public UpdateInfo(String currentVersion, String newVersion, String releaseTitle,
+                          String changelog, String downloadUrl, String apkName, long apkSize,
+                          String releaseUrl) {
             this.currentVersion = currentVersion;
             this.newVersion = newVersion;
             this.releaseTitle = releaseTitle;
@@ -42,6 +49,7 @@ public final class AppUpdateChecker {
             this.downloadUrl = downloadUrl;
             this.apkName = apkName;
             this.apkSize = apkSize;
+            this.releaseUrl = releaseUrl;
         }
     }
 
@@ -132,6 +140,7 @@ public final class AppUpdateChecker {
 
         String normalizedNewVersion = tagName.startsWith("v") || tagName.startsWith("V")
                 ? tagName.substring(1) : tagName;
+        String htmlUrl = getString(root, "html_url");
 
         return new UpdateInfo(
                 currentVersionName,
@@ -140,7 +149,8 @@ public final class AppUpdateChecker {
                 changelog != null ? changelog.trim() : "",
                 bestAsset.downloadUrl,
                 bestAsset.name,
-                bestAsset.size
+                bestAsset.size,
+                htmlUrl
         );
     }
 

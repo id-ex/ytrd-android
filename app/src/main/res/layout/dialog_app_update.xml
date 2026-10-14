@@ -125,16 +125,38 @@
         android:id="@+id/scroll_changelog"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:maxHeight="160dp">
+        android:scrollbars="vertical"
+        android:fadeScrollbars="false">
 
-        <TextView
-            android:id="@+id/txt_update_changelog"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Описание изменений..."
-            android:textSize="13sp"
-            android:lineSpacingExtra="3dp"
-            android:textColor="@color/text_secondary" />
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/txt_update_changelog"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Описание изменений..."
+                android:textSize="13sp"
+                android:lineSpacingExtra="3dp"
+                android:textColor="@color/text_secondary" />
+
+            <TextView
+                android:id="@+id/btn_toggle_changelog"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:text="Полный список изменений ▾"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="@color/accent"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true" />
+        </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 
     <!-- Секция прогресса скачивания (скрыта до нажатия кнопки Обновить) -->
@@ -165,13 +187,27 @@
             android:textColor="@color/text_hint" />
     </LinearLayout>
 
-    <!-- Кнопки действий: Позже и Обновить (акцентный цвет) -->
+    <!-- Кнопки действий: GitHub, Позже и Обновить -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="end|center_vertical"
-        android:layout_marginTop="20dp">
+        android:gravity="center_vertical"
+        android:layout_marginTop="16dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_open_github"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:text="GitHub"
+            android:textColor="@color/text_hint"
+            android:textSize="13sp" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_update_later"
